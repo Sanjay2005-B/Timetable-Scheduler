@@ -1,8 +1,10 @@
 package com.erp.timetable.config;
 
+import com.erp.timetable.module.auth.entity.Institution;
 import com.erp.timetable.module.auth.entity.Role;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
+import com.erp.timetable.module.auth.repository.InstitutionRepository;
 import com.erp.timetable.module.auth.repository.RoleRepository;
 import com.erp.timetable.module.auth.repository.UserRepository;
 import com.erp.timetable.module.availability.entity.TimeSlot;
@@ -35,6 +37,7 @@ public class DataInitializerConfig {
 
     private final RoleRepository roleRepository;
     private final UserRepository userRepository;
+    private final InstitutionRepository institutionRepository;
     private final PasswordEncoder passwordEncoder;
     private final TimeSlotRepository timeSlotRepository;
     private final DepartmentRepository departmentRepository;
@@ -75,6 +78,15 @@ public class DataInitializerConfig {
                 admin.addRole(superAdmin);
                 userRepository.save(admin);
                 log.info("✅ Super Admin user created (admin / Admin@1234)");
+            }
+
+            // ── Seed default Institution (single global row, id = 1) ────
+            if (institutionRepository.findById(Institution.SINGLETON_ID).isEmpty()) {
+                institutionRepository.save(Institution.builder()
+                    .id(Institution.SINGLETON_ID)
+                    .name("Default Institution")
+                    .build());
+                log.info("✅ Default Institution row created");
             }
 
             // ── Seed Time Slots ──────────────────────────────────

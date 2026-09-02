@@ -15,6 +15,7 @@ const AvailabilityPage  = lazy(() => import('@/pages/availability/AvailabilityPa
 const TimetablePage     = lazy(() => import('@/pages/timetable/TimetablePage'))
 const ReportsPage       = lazy(() => import('@/pages/reports/ReportsPage'))
 const SettingsPage      = lazy(() => import('@/pages/settings/SettingsPage'))
+const ProfilePage       = lazy(() => import('@/pages/profile/ProfilePage'))
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-[60vh]">
@@ -38,6 +39,7 @@ export default function AppRouter() {
           <Route element={<RoleProtectedRoute />}>
             <Route element={<MainLayout />}>
               <Route path="/dashboard"    element={<DashboardPage />} />
+              <Route path="/profile"      element={<ProfilePage />} />
               <Route path="/faculty"      element={<FacultyPage />} />
               <Route path="/subjects"     element={<SubjectsPage />} />
               <Route path="/classrooms"   element={<ClassroomsPage />} />

@@ -100,6 +100,13 @@ public class TimetableGeneratorEngine {
         List.of("MON", "TUE", "WED", "THU", "FRI");
 
     /**
+     * Cache for consecutive windows: key = windowSize, value = windows list.
+     * This avoids recomputing the same windows repeatedly during scheduling.
+     * The cache is warmed at the start of each generateSchedule call.
+     */
+    private final Map<Integer, List<List<TimeSlot>>> consecutiveWindowsCache = new HashMap<>();
+
+    /**
      * Outcome of a single practical-block placement attempt. The declaration
      * order doubles as the diagnostic severity order (0 = most severe resource
      * shortage), so the caller reports the clearest cause across all candidate
@@ -136,6 +143,9 @@ public class TimetableGeneratorEngine {
      *                              regenerates unlocked slots
      */
     public void generateSchedule(Timetable timetable, boolean regenerateOnlyUnlocked) {
+        // Clear consecutive windows cache for this generation run
+        consecutiveWindowsCache.clear();
+
         // Seed RNG per generation: section ID + semester + timestamp jitter for
         // controlled randomness.  Same section/semester produces the same
         // timetable (test-reproducible); different invocations get varied layouts.
@@ -1109,26 +1119,29 @@ public class TimetableGeneratorEngine {
      * A window is only returned if:
      *   - none of its slots is a break
      *   - slot numbers are strictly sequential (gap = 1)
+     * <p>Uses a cache to avoid recomputing windows for the same windowSize.</p>
      */
     private List<List<TimeSlot>> buildConsecutiveWindows(List<TimeSlot> allSlots, int windowSize) {
-        List<List<TimeSlot>> windows = new ArrayList<>();
-        for (int i = 0; i <= allSlots.size() - windowSize; i++) {
-            List<TimeSlot> window = allSlots.subList(i, i + windowSize);
-            boolean valid = true;
-            for (int j = 0; j < window.size(); j++) {
-                TimeSlot ts = window.get(j);
-                if (Boolean.TRUE.equals(ts.getIsBreak())) { valid = false; break; }
-                if (j > 0) {
-                    TimeSlot prev = window.get(j - 1);
-                    if (ts.getSlotOrder() == null || prev.getSlotOrder() == null
-                            || ts.getSlotOrder() != prev.getSlotOrder() + 1) {
-                        valid = false; break;
+        return consecutiveWindowsCache.computeIfAbsent(windowSize, k -> {
+            List<List<TimeSlot>> windows = new ArrayList<>();
+            for (int i = 0; i <= allSlots.size() - k; i++) {
+                List<TimeSlot> window = allSlots.subList(i, i + k);
+                boolean valid = true;
+                for (int j = 0; j < window.size(); j++) {
+                    TimeSlot ts = window.get(j);
+                    if (Boolean.TRUE.equals(ts.getIsBreak())) { valid = false; break; }
+                    if (j > 0) {
+                        TimeSlot prev = window.get(j - 1);
+                        if (ts.getSlotOrder() == null || prev.getSlotOrder() == null
+                                || ts.getSlotOrder() != prev.getSlotOrder() + 1) {
+                            valid = false; break;
+                        }
                     }
                 }
+                if (valid) windows.add(new ArrayList<>(window));
             }
-            if (valid) windows.add(new ArrayList<>(window));
-        }
-        return windows;
+            return windows;
+        });
     }
 
     // =====================================================================

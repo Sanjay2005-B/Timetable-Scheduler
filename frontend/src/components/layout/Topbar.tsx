@@ -77,7 +77,10 @@ export default function Topbar({ onToggleSidebar, sidebarCollapsed }: TopbarProp
           <>
             <div className="fixed inset-0 z-10" onClick={() => setDrop(false)} />
             <div className="absolute right-0 top-12 w-52 bg-surface-100 border border-white/10 rounded-2xl shadow-card-lg z-20 py-1 animate-slide-up">
-              <button className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors">
+              <button
+                onClick={() => { setDrop(false); navigate('/profile') }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-gray-300 hover:text-white hover:bg-white/[0.06] transition-colors"
+              >
                 <User className="w-4 h-4" /> My Profile
               </button>
               <div className="my-1 border-t border-white/10" />
