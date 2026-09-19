@@ -1,0 +1,30 @@
+﻿# Logs
+*.log
+
+# Java / Maven
+target/
+*.class
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# Node
+node_modules/
+
+# Environment files
+.env
+.env.*
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# TypeScript build cache
+*.tsbuildinfo
+
+backend/faculty_results.txt
+backend/result.txt
+backend/test_output.txt
+backend/test_results.txt
