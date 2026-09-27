@@ -31,6 +31,7 @@ import com.erp.timetable.module.subject.entity.Subject;
 import com.erp.timetable.module.subject.repository.SubjectRepository;
 import com.erp.timetable.module.timetable.repository.TimetableEntryRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 
 @Service
 @RequiredArgsConstructor
@@ -45,6 +46,7 @@ public class FacultyService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
 
     @Transactional
     public FacultyResponse createFaculty(FacultyRequest request) {
@@ -60,6 +62,9 @@ public class FacultyService {
             department = departmentRepository.findById(request.getDepartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
         }
+        // The guard above only authorises the path id (null on create); the
+        // department in the body must also be the caller's own.
+        departmentScopeResolver.assertDepartmentInScope(department);
         User caller = tenantContext.currentUser();
         College college = caller != null ? caller.getCollege()
             : (department != null ? department.getCollege() : null);
@@ -141,14 +146,19 @@ public class FacultyService {
         String normalizedSearch = search != null && search.isBlank() ? null : search;
         String normalizedStatus = status != null && status.isBlank() ? null : status;
 
+        // An HOD is confined to their own department: the client-supplied
+        // departmentId is validated against (never trusted for) the DB-loaded
+        // user's department, and defaults to it when omitted.
+        Long effectiveDeptId = departmentScopeResolver.effectiveFilterDepartmentId(deptId);
+
         Page<Faculty> pageResult;
         if (global) {
             pageResult = facultyRepository.searchFaculty(
-                normalizedSearch, deptId, normalizedStatus, pageable);
+                normalizedSearch, effectiveDeptId, normalizedStatus, pageable);
         } else {
             Long collegeId = caller.getCollege() != null ? caller.getCollege().getId() : null;
             pageResult = facultyRepository.searchFacultyByCollege(
-                normalizedSearch, deptId, collegeId, normalizedStatus, pageable);
+                normalizedSearch, effectiveDeptId, collegeId, normalizedStatus, pageable);
         }
 
         List<FacultyResponse> content = pageResult.getContent().stream()
@@ -183,6 +193,10 @@ public class FacultyService {
             department = departmentRepository.findById(request.getDepartmentId())
                 .orElseThrow(() -> new ResourceNotFoundException("Department", "id", request.getDepartmentId()));
         }
+        // Without this an HOD passes canManageFaculty() on their OWN faculty and
+        // then reassigns it into another department (or another college), or
+        // detaches it by submitting a null departmentId.
+        departmentScopeResolver.assertNotDetached(department);
 
         faculty.setEmployeeId(request.getEmployeeId());
         faculty.setFirstName(request.getFirstName());

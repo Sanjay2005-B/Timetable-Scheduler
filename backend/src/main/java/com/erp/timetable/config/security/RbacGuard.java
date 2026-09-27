@@ -94,6 +94,32 @@ public class RbacGuard {
             && sameCollege(user, collegeIdOf(dept));
     }
 
+    /**
+     * Editing a department's own master data (name, contact, year/section
+     * configuration, archive/restore) is a college-administration action.
+     * SUPER_ADMIN: any; COLLEGE_ADMIN: own college only; HOD excluded — an HOD
+     * gets a strictly read-only view of their own department, enforced here so
+     * the UI cannot be bypassed.
+     */
+    public boolean canEditDepartment(Authentication authentication, Long departmentId) {
+        User user = currentUser(authentication);
+        if (user == null) {
+            return fallbackRoleAllowed(authentication,
+                RoleName.ROLE_SUPER_ADMIN, RoleName.ROLE_COLLEGE_ADMIN);
+        }
+        if (hasRole(user, RoleName.ROLE_SUPER_ADMIN)) {
+            return true;
+        }
+        if (departmentId == null || !hasRole(user, RoleName.ROLE_COLLEGE_ADMIN)) {
+            return false;
+        }
+        Department dept = departmentRepository.findById(departmentId).orElse(null);
+        if (dept == null) {
+            return true;
+        }
+        return sameCollege(user, collegeIdOf(dept));
+    }
+
     /** SUPER_ADMIN: any; COLLEGE_ADMIN: own college only; HOD excluded (destructive delete). */
     public boolean canDeleteDepartment(Authentication authentication, Long departmentId) {
         User user = currentUser(authentication);
@@ -641,6 +667,10 @@ public class RbacGuard {
     }
 
     private boolean sameDepartment(User user, Long departmentId) {
+        // A department-restricted HOD with no department is denied with the same
+        // actionable message the list endpoints use, instead of a bare 403 that
+        // looks like an ordinary ownership mismatch.
+        DepartmentScopeResolver.requireHodDepartment(user);
         return user.getDepartment() != null && user.getDepartment().getId().equals(departmentId);
     }
 }

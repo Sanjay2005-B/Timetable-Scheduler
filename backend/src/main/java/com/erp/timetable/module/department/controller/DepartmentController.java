@@ -54,8 +54,8 @@ public class DepartmentController {
     }
 
     @PutMapping("/{id}")
-    @PreAuthorize("@rbacGuard.canManageDepartment(authentication, #id)")
-    @Operation(summary = "Update department details")
+    @PreAuthorize("@rbacGuard.canEditDepartment(authentication, #id)")
+    @Operation(summary = "Update department details (HOD has a read-only view of their own department)")
     public ResponseEntity<ApiResponse<DepartmentResponse>> updateDepartment(
             @PathVariable Long id,
             @Valid @RequestBody DepartmentRequest request) {
@@ -64,7 +64,7 @@ public class DepartmentController {
     }
 
     @PatchMapping("/{id}/archive")
-    @PreAuthorize("@rbacGuard.canManageDepartment(authentication, #id)")
+    @PreAuthorize("@rbacGuard.canEditDepartment(authentication, #id)")
     @Operation(summary = "Archive department")
     public ResponseEntity<ApiResponse<Void>> archiveDepartment(@PathVariable Long id) {
         departmentService.archiveDepartment(id);
@@ -72,7 +72,7 @@ public class DepartmentController {
     }
 
     @PatchMapping("/{id}/restore")
-    @PreAuthorize("@rbacGuard.canManageDepartment(authentication, #id)")
+    @PreAuthorize("@rbacGuard.canEditDepartment(authentication, #id)")
     @Operation(summary = "Restore archived department")
     public ResponseEntity<ApiResponse<Void>> restoreDepartment(@PathVariable Long id) {
         departmentService.restoreDepartment(id);

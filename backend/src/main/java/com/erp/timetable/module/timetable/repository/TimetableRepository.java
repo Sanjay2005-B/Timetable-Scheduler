@@ -19,6 +19,8 @@ public interface TimetableRepository extends JpaRepository<Timetable, Long> {
 
     long countByDepartment_CollegeId(Long collegeId);
 
+    long countByDepartment_Id(Long departmentId);
+
     @Query("SELECT DISTINCT t FROM Timetable t JOIN t.entries e WHERE e.faculty.id = :facultyId")
     List<Timetable> findByFacultyId(@Param("facultyId") Long facultyId);
 }

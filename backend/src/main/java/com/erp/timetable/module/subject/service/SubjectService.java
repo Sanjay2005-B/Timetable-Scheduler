@@ -16,6 +16,7 @@ import com.erp.timetable.module.subject.repository.SubjectRepository;
 import com.erp.timetable.module.faculty.entity.Faculty;
 import com.erp.timetable.module.faculty.repository.FacultyRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import com.erp.timetable.module.auth.security.UserPrincipal;
@@ -42,6 +43,7 @@ public class SubjectService {
     private final SectionRepository sectionRepository;
     private final FacultyRepository facultyRepository;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
     private final com.erp.timetable.module.timetable.repository.TimetableEntryRepository entryRepository;
 
     @Transactional
@@ -62,6 +64,9 @@ public class SubjectService {
         Faculty assignedFaculty = request.getFacultyId() != null ?
             facultyRepository.findById(request.getFacultyId()).orElse(null) : null;
 
+        // The subject's department/year/section/faculty all come from the body
+        // and are not covered by the path-id guard (absent on create).
+        assertScope(department, academicYear, section, assignedFaculty);
         validateHierarchy(department, academicYear, section);
 
         Subject subject = Subject.builder()
@@ -96,15 +101,16 @@ public class SubjectService {
         boolean global = caller == null || caller.hasRole(RoleName.ROLE_SUPER_ADMIN);
         String normalizedSearch = search != null && search.isBlank() ? null : search;
         String normalizedType = subjectType != null && subjectType.isBlank() ? null : subjectType;
+        Long effectiveDeptId = departmentScopeResolver.effectiveFilterDepartmentId(deptId);
 
         Page<Subject> pageResult;
         if (global) {
             pageResult = subjectRepository.searchSubjects(
-                normalizedSearch, deptId, academicYearId, sectionId, normalizedType, pageable);
+                normalizedSearch, effectiveDeptId, academicYearId, sectionId, normalizedType, pageable);
         } else {
             Long collegeId = caller.getCollege() != null ? caller.getCollege().getId() : null;
             pageResult = subjectRepository.searchSubjectsByCollege(
-                normalizedSearch, deptId, academicYearId, sectionId, normalizedType, collegeId, pageable);
+                normalizedSearch, effectiveDeptId, academicYearId, sectionId, normalizedType, collegeId, pageable);
         }
 
         List<SubjectResponse> content = pageResult.getContent().stream()
@@ -161,6 +167,7 @@ public class SubjectService {
         Faculty assignedFaculty = request.getFacultyId() != null ?
             facultyRepository.findById(request.getFacultyId()).orElse(null) : null;
 
+        assertUpdateScope(department, academicYear, section, assignedFaculty);
         validateHierarchy(department, academicYear, section);
 
         subject.setSubjectCode(request.getSubjectCode());
@@ -189,6 +196,34 @@ public class SubjectService {
             .orElseThrow(() -> new ResourceNotFoundException("Subject", "id", id));
         entryRepository.deleteBySubjectId(id);
         subjectRepository.delete(subject);
+    }
+
+    /**
+     * Confines every department-scoped identifier in a create/update body to the
+     * caller's own department. A no-op for callers that are not department
+     * restricted; raises a {@link BusinessException} for an HOD targeting another
+     * department (directly or through a year, section or faculty member).
+     */
+    private void assertScope(Department department, AcademicYear academicYear,
+                             Section section, Faculty assignedFaculty) {
+        departmentScopeResolver.assertDepartmentInScope(department);
+        departmentScopeResolver.assertAcademicYearInScope(academicYear);
+        departmentScopeResolver.assertSectionInScope(section);
+        departmentScopeResolver.assertFacultyAssignable(assignedFaculty);
+    }
+
+    /**
+     * Update-path variant of {@link #assertScope}: additionally refuses a
+     * {@code null} department so a department-restricted HOD cannot detach the
+     * subject from their own department by omitting the field. Callers that are
+     * not department restricted are unaffected.
+     */
+    private void assertUpdateScope(Department department, AcademicYear academicYear,
+                                   Section section, Faculty assignedFaculty) {
+        departmentScopeResolver.assertNotDetached(department);
+        departmentScopeResolver.assertAcademicYearInScope(academicYear);
+        departmentScopeResolver.assertSectionInScope(section);
+        departmentScopeResolver.assertFacultyAssignable(assignedFaculty);
     }
 
     /**

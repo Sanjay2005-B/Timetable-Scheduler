@@ -459,12 +459,21 @@ class MultiCollegeE2ETest {
 
         // 11. HOD + data association stay with the CORRECT college/department.
         String hodUser = unique("hodA");
-        createDepartment(adminA, "A-ECE", hodUser, PW); // HOD provisioned for an A-department
+        long hodDeptA = createDepartment(adminA, "A-ECE", hodUser, PW); // HOD provisioned for an A-department
+        assertTrue(hodDeptA > 0);
         String hodAToken = loginToken(hodUser, PW);
-        // HOD of A sees A's CSE once and not B's.
-        assertEquals(1, countName(mockMvc.perform(get("/departments")
+        // The HOD is bound to the department created above, so the department
+        // list resolves to exactly that one row: their own department is
+        // visible, and no other department in college A (CSE) leaks in.
+        assertEquals(1, totalCount(mockMvc.perform(get("/departments")
+            .header("Authorization", "Bearer " + hodAToken)).andReturn()),
+            "A's HOD must see only their own department");
+        assertEquals(0, countName(mockMvc.perform(get("/departments")
             .header("Authorization", "Bearer " + hodAToken)).andReturn(), "CSE"),
-            "A's HOD must see A's single CSE and not B's");
+            "A's HOD must not see a sibling department they do not head");
+        assertEquals(1, countName(mockMvc.perform(get("/departments")
+            .header("Authorization", "Bearer " + hodAToken)).andReturn(), "A-ECE"),
+            "A's HOD must see their own department");
         // 9. HOD isolation: A's HOD cannot read B's CSE -> 403.
         mockMvc.perform(get("/departments/" + deptB).header("Authorization", "Bearer " + hodAToken))
             .andExpect(status().isForbidden());
@@ -674,5 +683,9 @@ class MultiCollegeE2ETest {
             }
         }
         return count;
+    }
+
+    private int totalCount(MvcResult result) throws Exception {
+        return data(result).get("content").size();
     }
 }

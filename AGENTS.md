@@ -3,6 +3,40 @@
 Shared known-facts for anyone working in this repo. Update freely; keep entries
 short and factual.
 
+## FOLLOW-UP TASK (not a regression): timetable-entry LOCK ICON is never rendered (logged 26-09-2026)
+
+- GAP: the backend fully supports locking a timetable entry, but **no frontend
+  code anywhere renders any visual indicator for it**. Verified 26-09-2026 by
+  grepping every `.tsx`: there is **no `Lock` / `LockIcon` / `isLocked` /
+  lock-icon reference in any component or page**. The locked/unlocked state is
+  completely invisible in the UI.
+- BACKEND IS COMPLETE AND WORKS: `TimetableEntry.isLocked` is a
+  `Boolean` entity field defaulting to `false`; `PATCH
+  /timetable/entries/{entryId}/lock` exists and toggles it; lock preservation
+  is honoured by `LockPreservationService.prepareForGeneration` (locked
+  entries survive `POST /timetable/generate` and
+  `POST /timetable/{id}/regenerate-unlocked`). `isLocked` is also present on
+  `TimetableEntryDto`, so **the data already reaches the browser** - only the
+  rendering is missing.
+- THIS CONTRADICTS AN EARLIER AGREED DESIGN SPEC: a lock icon in the
+  top-right of each timetable entry card was specified BEFORE the frontend
+  reskin work started. That spec was never implemented.
+- **NOT a Phase D regression.** It is a pre-existing gap. The Phase D reskin
+  deliberately did NOT add it: a lock indicator is NEW UI + NEW COPY, not a
+  token/colour/spacing change, so it falls outside the reskin's
+  "visual/CSS-only, no behaviour or copy changes" mandate. The reskin behaved
+  correctly by leaving it alone.
+- STATUS: **deferred by explicit user decision (26-09-2026) - do NOT build it
+  during Phases D or E.** Reopen only after the full reskin is complete.
+- WHEN IT IS DONE - the trap to avoid: `TimetablePage.tsx` and
+  `MyTimetablePage.tsx` each carry their own **duplicated copy** of the
+  timetable grid (same `DAYS`, same master-slot sourcing, same
+  `entryMap.get(\`${day}_${col.key}\`)` keying, same `isLab` LAB/THEORY
+  badge). Any entry-level UI (including a lock icon) must be added to BOTH
+  files or the two grids will diverge again. Keep the existing
+  `isLab ? 'LAB' : 'THEORY'` badge intact and keep the grid read-only (no
+  lock toggle) unless the spec is revisited.
+
 ## 42-slot capacity requirement — CONFIRMED COMPLETE + FROZEN (18-09-2026)
 
 - The user audited the implementation (read-only) and CONFIRMED the 42-slot
@@ -145,6 +179,92 @@ short and factual.
   practical with the server stopped; the 19-09 full run (source unchanged since) stands at 356/14 baseline.
 - Files changed this phase: NONE (runtime trace + verification only).
 
+## HOD department isolation (26-09-2026) — COMPLETE
+
+- GOAL: HOD confined to their OWN department across all master-data + dashboard
+  endpoints, DB-driven (NO hardcoded dept/user/college/role→dept values). Source of
+  truth = `users.department_id` (written by `DepartmentService.createHodLogin`, read
+  by `RbacGuard.sameDepartment`); `TenantContext.currentUser()` re-loads the DB user.
+  **NO migration / schema change.**
+- USER DECISIONS: (1) HOD gets a READ-ONLY view of only their own department —
+  backend now blocks HOD `PUT /departments/{id}` + archive + restore, and the UI
+  hides every mutating control; SUPER_ADMIN/COLLEGE_ADMIN keep full management.
+  (2) An UNASSIGNED HOD (no `department_id`) is denied everything department-scoped
+  with an actionable "not linked to a department" message — never guess/auto-assign.
+- NEW `config/security/DepartmentScopeResolver.java` (the single place the rule
+  lives): `restrictedDepartmentId()`, `effectiveFilterDepartmentId(requested)`
+  (HOD always gets own id; an explicit FOREIGN filter is REJECTED 422 rather than
+  silently ignored), and `assertDepartmentInScope` / `assertAcademicYearInScope` /
+  `assertSectionInScope` / `assertFacultyAssignable`.
+- **Two real bugs found & fixed while making the regression suite green:**
+  1. All four `assert*` methods originally treated a **null (= optional, not
+     supplied)** reference as a scope violation. That wrongly rejected legal
+     requests — an HOD creating a subject with NO `facultyId` (unassigned
+     subjects are legal) and an HOD creating a classroom with no year/section
+     (classroom year/section are OPTIONAL = "All Years"/"Shared") both 422'd. Fixed:
+     every `assert*` now no-ops on null and each service keeps its own
+     required-field validation. Symptom was
+     `RoleBasedAccessE2ETest#hod_subjectCreate_ownDepartmentOk_foreignDenied`
+     expected 201 got 422.
+  2. `restrictedDepartmentId()` treated ANY `ROLE_HOD` as restricted, even when the
+     same account also holds `ROLE_COLLEGE_ADMIN`/`ROLE_SUPER_ADMIN` — locking down
+     a college admin and contradicting the frontend `useHodScope.isHodReadOnly`
+     (which already exempts dept admins). Fixed: broader management grant wins
+     (`isDepartmentAdministrator`), so backend and frontend agree.
+- Back-end wiring: `FacultyService`, `SubjectService`, `ClassroomService`,
+  `DepartmentService`, `DashboardService` (all list filters + every create/update
+  parent ref); new `RbacGuard.canEditDepartment(...)` used by `DepartmentController`
+  PUT/archive/restore; additive repo counts `countByDepartment_Id` on
+  Faculty/Subject/Classroom/Timetable + new
+  `DepartmentRepository.searchDepartmentsByCollegeAndDepartment(...)`.
+- Frontend: NEW `hooks/useHodScope.ts`; `DepartmentsPage` read-only for HOD;
+  `FacultyPage`/`SubjectsPage`/`ClassroomsPage` default to + lock the HOD's own
+  department; `TimetablePage` locks the department select; `DashboardPage` shows the
+  scope label and swaps the Departments KPI for Timetables for an HOD.
+  `AvailabilityPage` needed NO change (backend faculty list is now scoped).
+- TESTS: NEW `HodDepartmentIsolationE2ETest` (9, green: list scoping, foreign
+  filter rejected, cross-dept by-id reads, dashboard counts, read-only department,
+  no faculty/academicYear/section reassignment out of the department).
+  `RoleBasedAccessE2ETest#hod_departmentUpdate_onlyOwn_foreignDenied` UPDATED: own-dept
+  PUT is now 403 too (approved read-only policy); added a COLLEGE_ADMIN positive
+  control proving the 403 is the HOD policy and not a bad body.
+  `MultiCollegeE2ETest` assertion CORRECTED — it asserted "A's HOD sees A's CSE",
+  but that HOD heads the OTHER dept (A-ECE), so seeing CSE was the BUG being asserted.
+  Now asserts total == 1, own dept visible, sibling CSE not visible.
+  GREEN: AuthFlow 18, CollegeRegistration 5, FacultyRole 9, Hod 9, Institution 8,
+  MultiCollege 7, PasswordReset 8, PhotoUpload 9, Profile 10, RoleBasedAccess 11,
+  DepartmentService 9, DepartmentPersistence 1 = **104 tests / 0 failures.**
+  Frontend `npm.cmd run build` green; `mvn -o compile` green.
+
+## PRE-EXISTING engine defect found 26-09-2026 (NOT caused by HOD work, do not "fix" unasked)
+
+- `TimetableGeneratorEngineCapacityAndLabDistributionTest#userCurriculum_fortyTwoDemand_schedulesEveryPeriod_labsDistributedAndConsecutive`
+  now fails **DETERMINISTICALLY 4/4 in isolation** (so it is NOT the known HashMap-order
+  flaky family): the exact-42 curriculum places only **27/42** periods and whole
+  subjects vanish from the output (observed missing CS505 Tamil 5T and/or CS749 PT 2T;
+  the placed set differs per run → engine bails partway, order-dependent).
+  The 19-09 entry above claims this test was 2/2 GREEN — that claim is now STALE.
+- PROVEN pre-existing by A/B: reverted the 12 HOD main-source files to the
+  pre-change backups + deleted `DepartmentScopeResolver`, ran the test on
+  `mvn -o clean test -Dtest=TimetableGeneratorEngineCapacityAndLabDistributionTest`
+  → **byte-identical failure "got 27"**. It is unrelated to department scoping (that
+  test calls the engine directly and touches no RbacGuard/service/controller path).
+- `mvn -o clean test` 26-09: **369 tests / 16 failures** = the 14 documented baseline
+  failures + `TimetableGeneratorEngineCapacityAndLabDistributionTest` (1, proven
+  pre-existing above) + `TimetableGeneratorEngineIntegrationTest#generateSchedule_placesConfiguredDoublePeriodAsConsecutiveBlock`
+  (1, the already-documented flaky member). ZERO failures in auth / HOD / department /
+  tenant areas. Do not chase the engine for the HOD work; the 27/42 defect needs its
+  own user-authorized task (engine code is out of scope for isolation changes).
+- TOOLING LESSON (cost real time): when A/B-testing by reverting, **back up NEW files
+  too** — `DepartmentScopeResolver` was created after the 17-file backup, so the revert
+  deleted it and it had to be rewritten from the call sites. Also `DepartmentRepository`
+  and `DepartmentController` were edited but never captured in the pre-change backup
+  (harmless here: the only edits are an additive query/count and a `@PreAuthorize`
+  swap, neither on the engine's code path). Back up the FULL intended change set —
+  including brand-new files — BEFORE the first edit.
+  Final-state backup of all 23 changed files:
+  `C:\Users\Sanja\AppData\Local\Temp\opencode\hod_isolation_final_20260926`.
+
 ## Weekly-capacity validation (CAPACITY_EXCEEDED) — 18-09-2026 (backend-only)
 
 - GAP FIXED: nothing previously verified that a class's curriculum could fit
@@ -281,6 +401,62 @@ short and factual.
   a FRONTEND RENDERING/COUNT issue (columns built from entries + no count
   badge), not a backend data problem — audit the grid column derivation and the
   count indicator before touching the backend or the cache layer.
+
+## HOD department isolation — remaining 5 gaps FIXED (26-09-2026, second pass)
+
+- SCOPE: only the 5 outstanding isolation gaps. ZERO migration/schema, ZERO engine, ZERO
+  RBAC-guard-logic, ZERO unrelated UI. Final backup of all 9 changed files:
+  `C:\Users\Sanja\AppData\Local\Temp\opencode\hod_isolation_gapfix_final_20260926`.
+- 1. `ReportService.getRoomUtilizationReport()` used `findByDepartment_CollegeId` for every
+  non-SUPER_ADMIN caller, so an HOD saw the WHOLE COLLEGE's rooms. Now resolves
+  `departmentScopeResolver.restrictedDepartmentId()` first: restricted HOD →
+  `classroomRepository.findByDepartment_Id(own)`, else the unchanged college branch.
+  SUPER_ADMIN still `findAll()`. (`MAINTENANCE` status literal — a typo was introduced and
+  reverted during the edit; re-check the string if this report ever counts 0 maintenance.)
+- 2. `DepartmentsPage.tsx`: the SearchInput + Active/Archived toggle block is now wrapped in
+  `{!isHodReadOnly && …}`. An HOD list holds no archived rows and one row, so both controls were
+  dead. Admins unaffected.
+- 3. `TimetableService.getMyTimetables(UserPrincipal)` fell through to the COLLEGE branch for an
+  HOD with no `department_id`, exposing every department's timetables. Now calls
+  `DepartmentScopeResolver.requireHodDepartment(user)` before the role branches.
+- 4. CONSISTENCY: `RbacGuard.sameDepartment(...)` used to return a bare 403 for an unassigned
+  HOD, while the list endpoints threw `BusinessException` → 422 + a real message. It now calls
+  the same `requireHodDepartment`, so EVERY surface returns **422** with
+  `HOD_UNASSIGNED_MESSAGE` ("Your HOD account is not linked to a department. Please contact
+  your college administrator."). The new static trio in `DepartmentScopeResolver` —
+  `HOD_UNASSIGNED_MESSAGE`, `isDepartmentRestrictedHod(User)`, `requireHodDepartment(User)` —
+  is the single definition (HOD **and not** COLLEGE_ADMIN/SUPER_ADMIN, mirroring
+  `useHodScope.isHodReadOnly`); `restrictedDepartmentId()` now delegates to them, replacing the
+  old private `isDepartmentAdministrator`.
+- 5. DETACH: `assertNotDetached(Department)` added to the resolver and used on the UPDATE paths
+  only (FacultyService:198, `SubjectService.assertUpdateScope` from 170, `ClassroomService
+  .assertUpdateScope` from 157) so an HOD cannot drop a record out of their own department by
+  sending `departmentId: null` (message: "You cannot remove a record from your department.
+  Reassign it to a department you manage."). CREATE paths keep `assertDepartmentInScope`
+  (null = "not supplied" and is legal there — e.g. a subject with no facultyId). Non-HOD
+  callers (incl. SUPER_ADMIN/COLLEGE_ADMIN detaching a record) are unaffected.
+- TESTS: `HodDepartmentIsolationE2ETest` 9 → **15** (all green, in-memory
+  `jdbc:h2:mem:hod_dept_isolation_e2e`). Added: `hodRoomUtilizationReportCountsOnlyOwn
+  DepartmentRooms`, `hodCannotCreateDepartments`, `unassignedHodIsDeniedOnOwnTimetables
+  WithActionableMessage` (new `createUnassignedHod()` helper → UserRepository/RoleRepository/
+  PasswordEncoder autowired, ROLE_HOD with null department AND null college), `superAdminCanEdit
+  ArchiveAndRestoreDepartments`, `hodCrossDepartmentAccessIsDeniedOnEverySurface` (6 reads +
+  PUT/archive/restore/delete), `hodCannotDetachOwnRecordsBySubmittingNullDepartment`.
+  Two self-inflicted test bugs fixed while writing them: `YearSectionsRequest.sections` is a
+  `List<String>` (not objects — an object array caused a 500 JSON parse error) and the
+  unassigned-HOD per-id denial is **422, not 403** (that was the point of change #4).
+- VERIFICATION (safe set only, 11 classes, **109 tests / 0 failures**): AuthFlow 18,
+  CollegeRegistration 5, FacultyRole 9, HodDepartmentIsolation 15, InstitutionApi 8,
+  MultiCollege 7, PasswordReset 8, PhotoUpload 9, ProfileApi 10, RoleBasedAccess 11,
+  DepartmentService 9. `mvn -o test-compile` green; `npm.cmd run build` green.
+- **H2 SAFETY (critical, learned 26-09):** EVERY `module/auth/*E2ETest` pins its own
+  `jdbc:h2:mem:<name>` in `@SpringBootTest(properties=…)` → those are always safe to run.
+  `DepartmentPersistenceE2ETest` and the timetable engine/API suites are NOT — they use the
+  persistent `${user.home}/.timetable-scheduler/data/timetabledb.mv.db` and WILL write to it
+  (`ddl-auto:update`). Do NOT run them for isolation work; run the auth set + unit tests only.
+  ALSO: `target/surefire-reports` keeps STALE `.txt` files from earlier full runs — always
+  check `LastWriteTime` before believing an aggregate failure count (a "12 failures" read was
+  entirely 90-minute-old timetable-engine reports from the prior full run).
 
 ## Known flaky / non-deterministic tests
 

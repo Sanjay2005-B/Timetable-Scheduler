@@ -14,6 +14,7 @@ import com.erp.timetable.module.department.repository.DepartmentRepository;
 import com.erp.timetable.module.department.repository.SectionRepository;
 import com.erp.timetable.module.timetable.repository.TimetableEntryRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -38,6 +39,7 @@ public class ClassroomService {
     private final SectionRepository sectionRepository;
     private final TimetableEntryRepository timetableEntryRepository;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
 
     @Transactional
     public ClassroomResponse createClassroom(ClassroomRequest request) {
@@ -58,6 +60,10 @@ public class ClassroomService {
             section = sectionRepository.findById(request.getSectionId())
                 .orElseThrow(() -> new ResourceNotFoundException("Section", "id", request.getSectionId()));
         }
+
+        // Department, academic year and section all arrive in the body and are
+        // not covered by the path-id guard (absent on create).
+        assertScope(department, academicYear, section);
 
         Classroom classroom = Classroom.builder()
             .roomNumber(request.getRoomNumber())
@@ -87,6 +93,9 @@ public class ClassroomService {
         String normalizedSearch = search != null && search.isBlank() ? null : search;
         String normalizedType = roomType != null && roomType.isBlank() ? null : roomType;
         String normalizedStatus = status != null && status.isBlank() ? null : status;
+        // Previously the department slot was hardcoded to null here, so an HOD
+        // always received every classroom in the college with no way to narrow.
+        Long effectiveDeptId = departmentScopeResolver.effectiveFilterDepartmentId(null);
 
         Page<Classroom> pageResult;
         if (global) {
@@ -95,7 +104,7 @@ public class ClassroomService {
         } else {
             Long collegeId = caller.getCollege() != null ? caller.getCollege().getId() : null;
             pageResult = classroomRepository.searchClassroomsByCollege(
-                normalizedSearch, null, collegeId, normalizedType, normalizedStatus, pageable);
+                normalizedSearch, effectiveDeptId, collegeId, normalizedType, normalizedStatus, pageable);
         }
 
         List<ClassroomResponse> content = pageResult.getContent().stream()
@@ -143,6 +152,10 @@ public class ClassroomService {
                 .orElseThrow(() -> new ResourceNotFoundException("Section", "id", request.getSectionId()));
         }
 
+        // Without this an HOD passes canManageClassroom() on their OWN classroom
+        // and then moves it into another department's year/section.
+        assertUpdateScope(department, academicYear, section);
+
         classroom.setRoomNumber(request.getRoomNumber());
         classroom.setRoomName(request.getRoomName());
         classroom.setBuilding(request.getBuilding());
@@ -169,6 +182,30 @@ public class ClassroomService {
         timetableEntryRepository.deleteByClassroomId(id);
 
         classroomRepository.delete(classroom);
+    }
+
+    /**
+     * Confines every department-scoped identifier in a create/update body to the
+     * caller's own department. A no-op for callers that are not department
+     * restricted; raises a {@link com.erp.timetable.common.exception.BusinessException}
+     * for an HOD targeting another department directly or via a year/section.
+     */
+    private void assertScope(Department department, AcademicYear academicYear, Section section) {
+        departmentScopeResolver.assertDepartmentInScope(department);
+        departmentScopeResolver.assertAcademicYearInScope(academicYear);
+        departmentScopeResolver.assertSectionInScope(section);
+    }
+
+    /**
+     * Update-path variant of {@link #assertScope}: additionally refuses a
+     * {@code null} department so a department-restricted HOD cannot detach the
+     * classroom from their own department by omitting the field. Callers that
+     * are not department restricted are unaffected.
+     */
+    private void assertUpdateScope(Department department, AcademicYear academicYear, Section section) {
+        departmentScopeResolver.assertNotDetached(department);
+        departmentScopeResolver.assertAcademicYearInScope(academicYear);
+        departmentScopeResolver.assertSectionInScope(section);
     }
 
     private ClassroomResponse mapToResponse(Classroom c) {

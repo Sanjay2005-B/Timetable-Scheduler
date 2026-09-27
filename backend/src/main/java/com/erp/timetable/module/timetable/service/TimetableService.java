@@ -2,6 +2,7 @@ package com.erp.timetable.module.timetable.service;
 
 import com.erp.timetable.common.exception.BusinessException;
 import com.erp.timetable.common.exception.ResourceNotFoundException;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import com.erp.timetable.module.auth.repository.UserRepository;
@@ -177,6 +178,10 @@ public class TimetableService {
 
         List<Timetable> timetables;
         Long facultyOnlyId = null;
+        // A department-restricted HOD is never widened: an unassigned one is
+        // denied outright rather than falling through to the college-wide
+        // branch below, which would expose every department's timetables.
+        DepartmentScopeResolver.requireHodDepartment(user);
         if (user.hasRole(RoleName.ROLE_STUDENT)) {
             timetables = user.getSectionId() != null
                 ? timetableRepository.findBySectionIdIn(List.of(user.getSectionId()))

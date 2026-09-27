@@ -45,4 +45,6 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
     Page<Subject> searchSubjectsByCollege(String search, Long deptId, Long academicYearId, Long sectionId, String subjectType, Long collegeId, Pageable pageable);
 
     long countByDepartment_CollegeId(Long collegeId);
+
+    long countByDepartment_Id(Long departmentId);
 }

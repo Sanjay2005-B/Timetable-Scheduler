@@ -45,4 +45,6 @@ public interface FacultyRepository extends JpaRepository<Faculty, Long> {
     long countByCollege_Id(Long collegeId);
 
     long countByDepartment_CollegeId(Long collegeId);
+
+    long countByDepartment_Id(Long departmentId);
 }

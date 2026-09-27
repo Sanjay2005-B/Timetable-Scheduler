@@ -10,6 +10,7 @@ import com.erp.timetable.module.subject.entity.Subject;
 import com.erp.timetable.module.subject.repository.SubjectRepository;
 import com.erp.timetable.module.timetable.repository.TimetableRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class DashboardService {
     private final ClassroomRepository classroomRepository;
     private final TimetableRepository timetableRepository;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
 
     @Transactional(readOnly = true)
     public DashboardStatsResponse getDashboardStats() {
@@ -40,22 +42,29 @@ public class DashboardService {
         boolean global = caller == null || caller.hasRole(RoleName.ROLE_SUPER_ADMIN);
         Long collegeId = caller != null && caller.getCollege() != null
             ? caller.getCollege().getId() : null;
+        // An HOD's dashboard describes their own department, not the college.
+        Long deptId = departmentScopeResolver.restrictedDepartmentId();
 
         long totalDepartments = global ? departmentRepository.count()
+            : deptId != null ? (departmentRepository.existsById(deptId) ? 1 : 0)
             : departmentRepository.countByCollege_Id(collegeId);
         long totalFaculty = global ? facultyRepository.count()
+            : deptId != null ? facultyRepository.countByDepartment_Id(deptId)
             : facultyRepository.countByCollege_Id(collegeId);
         long totalSubjects = global ? subjectRepository.count()
+            : deptId != null ? subjectRepository.countByDepartment_Id(deptId)
             : subjectRepository.countByDepartment_CollegeId(collegeId);
         long totalClassrooms = global ? classroomRepository.count()
+            : deptId != null ? classroomRepository.countByDepartment_Id(deptId)
             : classroomRepository.countByDepartment_CollegeId(collegeId);
         long totalTimetables = global ? timetableRepository.count()
+            : deptId != null ? timetableRepository.countByDepartment_Id(deptId)
             : timetableRepository.countByDepartment_CollegeId(collegeId);
 
-        // Calculate Faculty Workload dynamically (college-scoped for non-global callers)
+        // Faculty Workload, scoped to the same audience as the counters above
         Page<Faculty> facultyPage = global
             ? facultyRepository.findAll(PageRequest.of(0, 6))
-            : facultyRepository.searchFacultyByCollege(null, null, collegeId, null, PageRequest.of(0, 6));
+            : facultyRepository.searchFacultyByCollege(null, deptId, collegeId, null, PageRequest.of(0, 6));
         List<DashboardStatsResponse.FacultyWorkloadDto> workloadList = new ArrayList<>();
         for (Faculty f : facultyPage.getContent()) {
             workloadList.add(DashboardStatsResponse.FacultyWorkloadDto.builder()
@@ -67,8 +76,9 @@ public class DashboardService {
             workloadList.add(new DashboardStatsResponse.FacultyWorkloadDto("No Faculty", 0));
         }
 
-        // Calculate Room Utilization dynamically (college-scoped for non-global callers)
+        // Room Utilization, same scope
         List<Classroom> classrooms = global ? classroomRepository.findAll()
+            : deptId != null ? classroomRepository.findByDepartment_Id(deptId)
             : classroomRepository.findByDepartment_CollegeId(collegeId);
         // Note: classroom count is typically small (10-50 rooms), no pagination needed
         long totalRoomsCount = classrooms.size();
@@ -89,7 +99,7 @@ public class DashboardService {
         // Calculate Today's Classes dynamically from subjects & faculty
         Page<Subject> subjectPage = global
             ? subjectRepository.findAll(PageRequest.of(0, 4))
-            : subjectRepository.searchSubjectsByCollege(null, null, null, null, null, collegeId, PageRequest.of(0, 4));
+            : subjectRepository.searchSubjectsByCollege(null, deptId, null, null, null, collegeId, PageRequest.of(0, 4));
         List<DashboardStatsResponse.TodayClassDto> todayClasses = new ArrayList<>();
         String[] timeSlots = {"09:00", "10:40", "13:10", "14:50"};
         int i = 0;

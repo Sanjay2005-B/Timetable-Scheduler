@@ -25,6 +25,7 @@ import com.erp.timetable.module.auth.entity.User;
 import com.erp.timetable.module.auth.repository.RoleRepository;
 import com.erp.timetable.module.auth.repository.UserRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
@@ -70,6 +71,7 @@ public class DepartmentService {
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
 
     @Transactional
     public DepartmentResponse createDepartment(DepartmentRequest request) {
@@ -189,12 +191,22 @@ public class DepartmentService {
             );
         } else {
             Long collegeId = caller.getCollege() != null ? caller.getCollege().getId() : null;
-            pageResult = departmentRepository.searchDepartmentsByCollege(
-                search != null && search.isBlank() ? null : search,
-                isArchived,
-                collegeId,
-                pageable
-            );
+            // An HOD lists their own department only; the college still scopes
+            // everyone else.
+            Long effectiveDeptId = departmentScopeResolver.effectiveFilterDepartmentId(null);
+            pageResult = effectiveDeptId != null
+                ? departmentRepository.searchDepartmentsByCollegeAndDepartment(
+                    search != null && search.isBlank() ? null : search,
+                    isArchived,
+                    collegeId,
+                    effectiveDeptId,
+                    pageable)
+                : departmentRepository.searchDepartmentsByCollege(
+                    search != null && search.isBlank() ? null : search,
+                    isArchived,
+                    collegeId,
+                    pageable
+                );
         }
 
         List<DepartmentResponse> content = pageResult.getContent().stream()

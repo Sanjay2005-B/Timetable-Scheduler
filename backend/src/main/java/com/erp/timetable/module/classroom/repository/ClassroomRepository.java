@@ -40,4 +40,6 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     Page<Classroom> searchClassroomsByCollege(String search, Long deptId, Long collegeId, String roomType, String status, Pageable pageable);
 
     long countByDepartment_CollegeId(Long collegeId);
+
+    long countByDepartment_Id(Long departmentId);
 }

@@ -336,10 +336,23 @@ class RoleBasedAccessE2ETest {
                 .content("{\"name\":\"RenamedForeign\",\"building\":\"Block-Y\"," + yearsJson + "}"))
             .andExpect(status().isForbidden());
 
-        // Own department: guard passes → service accepts the update (positive
-        // control proving the 403 above is RBAC, not a bad id/body).
+        // Own department is READ-ONLY for an HOD. Department master data is a
+        // college-administration action, so canEditDepartment rejects the HOD
+        // for their OWN department too — both cases are 403.
         mockMvc.perform(put("/departments/" + own.getId())
                 .header("Authorization", "Bearer " + token)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"name\":\"" + own.getName() + "\",\"building\":\"Block-X\"," + yearsJson + "}"))
+            .andExpect(status().isForbidden());
+
+        // Positive control: the identical update by a COLLEGE_ADMIN of the same
+        // college still succeeds, proving the 403s above are the HOD read-only
+        // policy and not a malformed body.
+        User collegeAdmin = saveUser("rbac_coladmin_upd", RoleName.ROLE_COLLEGE_ADMIN, null);
+        collegeAdmin.setCollege(own.getCollege());
+        userRepository.save(collegeAdmin);
+        mockMvc.perform(put("/departments/" + own.getId())
+                .header("Authorization", "Bearer " + loginAccessToken("rbac_coladmin_upd"))
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"name\":\"" + own.getName() + "\",\"building\":\"Block-X\"," + yearsJson + "}"))
             .andExpect(status().isOk());

@@ -7,6 +7,7 @@ import com.erp.timetable.module.faculty.repository.FacultyRepository;
 import com.erp.timetable.module.timetable.entity.TimetableEntry;
 import com.erp.timetable.module.timetable.repository.TimetableEntryRepository;
 import com.erp.timetable.config.security.TenantContext;
+import com.erp.timetable.config.security.DepartmentScopeResolver;
 import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import lombok.RequiredArgsConstructor;
@@ -30,6 +31,7 @@ public class ReportService {
     private final ClassroomRepository classroomRepository;
     private final TimetableEntryRepository entryRepository;
     private final TenantContext tenantContext;
+    private final DepartmentScopeResolver departmentScopeResolver;
 
     @Transactional(readOnly = true)
     public Map<String, Object> getFacultyReport(Long facultyId) {
@@ -63,10 +65,17 @@ public class ReportService {
     public Map<String, Object> getRoomUtilizationReport() {
         User caller = tenantContext.currentUser();
         boolean global = caller == null || caller.hasRole(RoleName.ROLE_SUPER_ADMIN);
-        List<Classroom> rooms = global ? classroomRepository.findAll()
-            : (caller.getCollege() != null
-                ? classroomRepository.findByDepartment_CollegeId(caller.getCollege().getId())
-                : List.of());
+        // An HOD's room utilization describes their own department. An HOD with
+        // no department is denied by the resolver rather than widened to the
+        // whole college.
+        Long deptId = departmentScopeResolver.restrictedDepartmentId();
+        List<Classroom> rooms = global
+                ? classroomRepository.findAll()
+                : deptId != null
+                    ? classroomRepository.findByDepartment_Id(deptId)
+                    : (caller.getCollege() != null
+                        ? classroomRepository.findByDepartment_CollegeId(caller.getCollege().getId())
+                        : List.of());
         Map<String, Object> report = new HashMap<>();
         report.put("totalRooms", rooms.size());
         report.put("availableRooms", rooms.stream().filter(r -> "AVAILABLE".equals(r.getStatus())).count());
