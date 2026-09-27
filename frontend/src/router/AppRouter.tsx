@@ -18,7 +18,6 @@ const ClassroomsPage    = lazy(() => import('@/pages/classrooms/ClassroomsPage')
 const AvailabilityPage  = lazy(() => import('@/pages/availability/AvailabilityPage'))
 const TimetablePage     = lazy(() => import('@/pages/timetable/TimetablePage'))
 const ReportsPage       = lazy(() => import('@/pages/reports/ReportsPage'))
-const SettingsPage      = lazy(() => import('@/pages/settings/SettingsPage'))
 const ProfilePage       = lazy(() => import('@/pages/profile/ProfilePage'))
 const MyTimetablePage   = lazy(() => import('@/pages/timetable/MyTimetablePage'))
 const MySubjectsPage    = lazy(() => import('@/pages/subjects/MySubjectsPage'))
@@ -72,22 +71,22 @@ export default function AppRouter() {
             </Route>
           </Route>
 
-{/* Protected — management staff (no Faculty; faculty have own pages below) */}
-           <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_STAFF_ROLES} />}>
-             <Route element={<MainLayout />}>
-               <Route path="/dashboard"    element={<DashboardPage />} />
-               <Route path="/faculty"      element={<FacultyPage />} />
-               <Route path="/classrooms"   element={<ClassroomsPage />} />
-             </Route>
-           </Route>
+          {/* Protected — management staff (no Faculty; faculty have own pages below) */}
+          <Route element={<RoleProtectedRoute allowedRoles={MANAGEMENT_STAFF_ROLES} />}>
+            <Route element={<MainLayout />}>
+              <Route path="/dashboard"    element={<DashboardPage />} />
+              <Route path="/faculty"      element={<FacultyPage />} />
+              <Route path="/classrooms"   element={<ClassroomsPage />} />
+            </Route>
+          </Route>
 
-           {/* Protected — subjects & availability master data (no College Admin) */}
-           <Route element={<RoleProtectedRoute allowedRoles={SUBJECT_AVAILABILITY_ROLES} />}>
-             <Route element={<MainLayout />}>
-               <Route path="/subjects"     element={<SubjectsPage />} />
-               <Route path="/availability" element={<AvailabilityPage />} />
-             </Route>
-           </Route>
+          {/* Protected — subjects & availability master data (no College Admin) */}
+          <Route element={<RoleProtectedRoute allowedRoles={SUBJECT_AVAILABILITY_ROLES} />}>
+            <Route element={<MainLayout />}>
+              <Route path="/subjects"     element={<SubjectsPage />} />
+              <Route path="/availability" element={<AvailabilityPage />} />
+            </Route>
+          </Route>
 
           {/* Protected — faculty/student own timetable */}
           <Route element={<RoleProtectedRoute allowedRoles={MY_TIMETABLE_ROLES} />}>
@@ -107,7 +106,6 @@ export default function AppRouter() {
           <Route element={<RoleProtectedRoute allowedRoles={ADMIN_ROLES} />}>
             <Route element={<MainLayout />}>
               <Route path="/departments"  element={<DepartmentsPage />} />
-              <Route path="/settings"     element={<SettingsPage />} />
             </Route>
           </Route>
 

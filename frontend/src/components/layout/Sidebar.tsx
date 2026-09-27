@@ -1,8 +1,7 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Building2, Users, BookOpen, BookMarked,
-  DoorOpen, CalendarCheck, Calendar, Settings,
-  Zap, X
+  DoorOpen, CalendarCheck, Calendar, X, Zap
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import clsx from 'clsx'
@@ -43,12 +42,6 @@ const NAV_ITEMS = [
     group: 'Scheduling',
     items: [
       { to: '/timetable', icon: Calendar, label: 'Timetable', roles: ['ROLE_SUPER_ADMIN', 'ROLE_COLLEGE_ADMIN', 'ROLE_HOD', 'ROLE_EXAM_COORDINATOR'] },
-    ],
-  },
-  {
-    group: 'System',
-    items: [
-      { to: '/settings', icon: Settings, label: 'Settings', roles: ['ROLE_SUPER_ADMIN', 'ROLE_COLLEGE_ADMIN'] },
     ],
   },
 ]
@@ -94,25 +87,9 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Sideba
       >
         {/* ── Logo ── */}
         <div className="flex items-center gap-2 px-3 h-12 border-b border-line flex-shrink-0 bg-surface">
-          <div className="w-6 h-6 rounded-sm bg-accent-500 border border-line flex items-center justify-center flex-shrink-0">
-            <Zap className="w-3.5 h-3.5 text-white" />
+          <div className="w-6 h-6 rounded-sm bg-accent-500 border border-line flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-white">
+            <Zap className="w-3.5 h-3.5" />
           </div>
-          {!railCollapsed && (
-            <div className="overflow-hidden">
-              <p className="text-[11px] font-bold text-ink leading-tight truncate uppercase">
-                Timetable Scheduler
-              </p>
-              <p className="text-[9px] text-ink-soft leading-tight tracking-wider uppercase">College Schedule ERP</p>
-            </div>
-          )}
-          {/* Close control — mobile drawer only */}
-          <button
-            onClick={onCloseMobile}
-            className="ml-auto lg:hidden p-1 rounded-sm text-ink hover:bg-slate-200 transition-colors"
-            aria-label="Close navigation"
-          >
-            <X className="w-4 h-4" />
-          </button>
         </div>
 
         {/* ── Navigation ── */}

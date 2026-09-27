@@ -46,13 +46,8 @@ export default function Topbar({ onToggleSidebar, onToggleMobile, mobileOpen, si
         {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
       </button>
 
-      {/* Desktop: collapse/expand the icon rail */}
-      <button onClick={onToggleSidebar} className="btn-icon hidden lg:inline-flex" aria-label="Toggle sidebar">
-        <Menu className="w-4 h-4" />
-      </button>
-
       {/* Branding — the header's identity block */}
-      <div className="hidden md:flex items-center gap-2 pr-3 mr-1 border-r border-line h-6">
+      <div className="flex items-center gap-2 pr-3 mr-1 border-r border-line h-6">
         <span className="text-[11px] font-bold uppercase tracking-wider">Timetable Scheduler</span>
       </div>
 
