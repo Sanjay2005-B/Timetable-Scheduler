@@ -1,10 +1,12 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  Building2, Plus, Search, Trash2, Edit2, Archive, RefreshCw,
+  Building2, Plus, Trash2, Edit2, Archive, RefreshCw,
   Loader2, X, ChevronDown, ChevronRight, Layers, Check, Square
 } from 'lucide-react'
 import { departmentApi, DepartmentRequest, DepartmentResponse, DepartmentDependencies, YearSections } from '@/api/departmentApi'
+import SearchInput from '@/components/ui/SearchInput'
+import { useHodScope } from '@/hooks/useHodScope'
 
 const ALL_YEARS = ['1st Year', '2nd Year', '3rd Year', '4th Year']
 const ALL_SECTIONS = ['A', 'B', 'C', 'D', 'E']
@@ -15,6 +17,10 @@ const defaultYearSections = (): YearSections[] =>
 
 export default function DepartmentsPage() {
   const queryClient = useQueryClient()
+  // An HOD gets a read-only view of their own department; the backend enforces
+  // the same rule (canEditDepartment / canDeleteDepartment) so the hidden
+  // controls are not merely cosmetic.
+  const { isHodReadOnly } = useHodScope()
   const [search, setSearch] = useState('')
   const [isArchived, setIsArchived] = useState<boolean | undefined>(false)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -207,75 +213,84 @@ export default function DepartmentsPage() {
   const departments = data?.content || []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Toast Notification Banner ── */}
       {toastMessage && (
-        <div className={`p-4 rounded-xl font-semibold text-xs animate-fade-in flex items-center justify-between ${
+        <div className={`p-4 rounded-sm font-semibold text-xs animate-fade-in flex items-center justify-between ${
           toastType === 'error'
-            ? 'bg-danger/20 border border-danger/40 text-red-300'
-            : 'bg-success/20 border border-success/40 text-green-300'
+            ? 'bg-danger/20 border border-danger/40 text-danger'
+            : 'bg-success/20 border border-success/40 text-success'
         }`}>
           <span>{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={() => setToastMessage(null)} className="text-slate-600 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
       )}
 
       {/* ── Page Header ── */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Department Management</h1>
-          <p className="page-subtitle">Configure college departments, HODs, academic years, and customizable sections (A–E)</p>
+          <h1 className="page-title">{isHodReadOnly ? 'My Department' : 'Department Management'}</h1>
+          <p className="page-subtitle">
+            {isHodReadOnly
+              ? 'Read-only view of your department, its HOD and academic years'
+              : 'Configure college departments, HODs, academic years, and customizable sections (A–E)'}
+          </p>
         </div>
-        <button onClick={openCreateModal} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add Department
-        </button>
+        {!isHodReadOnly && (
+          <button onClick={openCreateModal} className="btn-primary">
+            <Plus className="w-4 h-4" /> Add Department
+          </button>
+        )}
       </div>
 
-      {/* ── Search & Filters ── */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex flex-1 items-center gap-3 max-w-md">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-            <input
-              type="text"
-              placeholder="Search by department name, HOD, building…"
-              className="input pl-10"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
+      {/* ── Search & Filters ── hidden for an HOD: a read-only single-department
+          view has nothing to search and no archived records to switch to. */}
+      {!isHodReadOnly && (
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <SearchInput
+            className="flex-1 max-w-md"
+            value={search}
+            onChange={setSearch}
+            placeholder="Search by department name, HOD, building…"
+          />
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsArchived(false)}
+              className={`btn-sm ${!isArchived ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Active ({departments.filter((d) => !d.isArchived).length})
+            </button>
+            <button
+              onClick={() => setIsArchived(true)}
+              className={`btn-sm ${isArchived ? 'btn-primary' : 'btn-secondary'}`}
+            >
+              Archived ({departments.filter((d) => d.isArchived).length})
+            </button>
           </div>
         </div>
-
-        <div className="flex items-center gap-2">
-          <button
-            onClick={() => setIsArchived(false)}
-            className={`btn-sm ${!isArchived ? 'btn-primary' : 'btn-secondary'}`}
-          >
-            Active ({departments.filter((d) => !d.isArchived).length})
-          </button>
-          <button
-            onClick={() => setIsArchived(true)}
-            className={`btn-sm ${isArchived ? 'btn-primary' : 'btn-secondary'}`}
-          >
-            Archived ({departments.filter((d) => d.isArchived).length})
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* ── Departments List ── */}
       {isLoading ? (
         <div className="flex items-center justify-center py-20">
-          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
       ) : departments.length === 0 ? (
         <div className="card">
           <div className="empty-state py-24">
-            <Building2 className="w-16 h-16 text-brand-500/30 mb-4" />
+            <Building2 className="w-16 h-16 text-accent-500/25 mb-4" />
             <h3 className="empty-state-title">No Departments Found</h3>
-            <p className="empty-state-desc">Get started by creating your college's first department.</p>
-            <button onClick={openCreateModal} className="btn-primary mt-4">
-              <Plus className="w-4 h-4" /> Create Department
-            </button>
+            <p className="empty-state-desc">
+              {isHodReadOnly
+                ? 'Your account is not assigned to a department yet. Ask your college administrator to assign one.'
+                : "Get started by creating your college's first department."}
+            </p>
+            {!isHodReadOnly && (
+              <button onClick={openCreateModal} className="btn-primary mt-4">
+                <Plus className="w-4 h-4" /> Create Department
+              </button>
+            )}
           </div>
         </div>
       ) : (
@@ -283,65 +298,71 @@ export default function DepartmentsPage() {
           {departments.map((dept) => {
             const isExpanded = expandedDeptId === dept.id
             return (
-              <div key={dept.id} className="card p-5 transition-all hover:border-white/10">
+              <div key={dept.id} className="card p-5 transition-all hover:border-slate-300 hover:shadow-card">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div className="flex items-start gap-4">
                     <button
                       onClick={() => setExpandedDeptId(isExpanded ? null : dept.id)}
-                      className="p-2 rounded-lg bg-surface-100 text-gray-400 hover:text-white mt-1"
+                      className="p-2 rounded-sm bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-900 transition-colors mt-1"
                     >
                       {isExpanded ? <ChevronDown className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
                     </button>
                     <div>
                       <div className="flex items-center gap-3">
-                        <h3 className="text-lg font-bold text-white">{dept.name}</h3>
+                        <h3 className="text-base font-bold text-slate-900">{dept.name}</h3>
                         {dept.isArchived ? (
                           <span className="badge badge-warning">Archived</span>
                         ) : (
                           <span className="badge badge-success">Active</span>
                         )}
                       </div>
-                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-400 mt-1">
-                        <span>HOD: <strong className="text-gray-200">{dept.hodName || 'Not assigned'}</strong></span>
-                        <span>Building: <strong className="text-gray-200">{dept.building || 'N/A'}</strong></span>
-                        <span>Contact: <strong className="text-gray-200">{dept.contactEmail || 'N/A'}</strong></span>
+                      <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-600 mt-1">
+                        <span>HOD: <strong className="text-slate-700">{dept.hodName || 'Not assigned'}</strong></span>
+                        <span>Building: <strong className="text-slate-700">{dept.building || 'N/A'}</strong></span>
+                        <span>Contact: <strong className="text-slate-700">{dept.contactEmail || 'N/A'}</strong></span>
                       </div>
                     </div>
                   </div>
 
                   <div className="flex items-center gap-2 self-end sm:self-center">
-                    <button onClick={() => openEditModal(dept)} className="btn-ghost btn-sm">
-                      <Edit2 className="w-4 h-4 text-brand-400" /> Edit
-                    </button>
-                    {dept.isArchived ? (
-                      <button onClick={() => restoreMutation.mutate(dept.id)} className="btn-ghost btn-sm text-success">
-                        <RefreshCw className="w-4 h-4" /> Restore
-                      </button>
-                    ) : (
-                      <button onClick={() => archiveMutation.mutate(dept.id)} className="btn-ghost btn-sm text-warning">
-                        <Archive className="w-4 h-4" /> Archive
-                      </button>
+                    {!isHodReadOnly && (
+                      <>
+                        <button onClick={() => openEditModal(dept)} className="btn-ghost btn-sm">
+                          <Edit2 className="w-4 h-4 text-slate-500" /> Edit
+                        </button>
+                        {dept.isArchived ? (
+                          <button onClick={() => restoreMutation.mutate(dept.id)} className="btn-ghost btn-sm text-success">
+                            <RefreshCw className="w-4 h-4" /> Restore
+                          </button>
+                        ) : (
+                          <button onClick={() => archiveMutation.mutate(dept.id)} className="btn-ghost btn-sm text-warning">
+                            <Archive className="w-4 h-4" /> Archive
+                          </button>
+                        )}
+                        <button
+                          onClick={() => openDeleteConfirm(dept)}
+                          className="btn-ghost btn-sm text-danger"
+                        >
+                          <Trash2 className="w-4 h-4" /> Delete
+                        </button>
+                      </>
                     )}
-                    <button
-                      onClick={() => openDeleteConfirm(dept)}
-                      className="btn-ghost btn-sm text-danger"
-                    >
-                      <Trash2 className="w-4 h-4" /> Delete
-                    </button>
                   </div>
                 </div>
 
                 {/* ── Expanded Academic Years & Sections Hierarchy ── */}
                 {isExpanded && (
-                  <div className="mt-5 pt-5 border-t border-white/5 space-y-4 animate-fade-in">
-                    <h4 className="text-xs font-semibold uppercase tracking-wider text-gray-400 flex items-center gap-2">
-                      <Layers className="w-4 h-4 text-brand-400" /> Academic Years & Configured Sections
+                  <div className="mt-5 pt-5 border-t border-line space-y-4 animate-fade-in">
+                    <h4 className="label-caps flex items-center gap-2">
+                      <Layers className="w-4 h-4 text-accent-500" /> Academic Years & Configured Sections
                     </h4>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
                       {dept.academicYears?.map((year) => (
-                        <div key={year.id} className={`p-3 rounded-xl border ${year.isEnabled === false ? 'bg-surface-200/40 border-white/5' : 'bg-surface-100 border-white/5'}`}>
+                        /* A near-white `bg-white` box inside a near-white card is
+                           invisible — both tiers now use a warm slate tint. */
+                        <div key={year.id} className={`p-3 rounded-sm border ${year.isEnabled === false ? 'bg-slate-100/60 border-line' : 'bg-slate-50 border-line'}`}>
                           <div className="flex items-center justify-between mb-2">
-                            <span className={`font-semibold text-sm ${year.isEnabled === false ? 'text-gray-500' : 'text-white'}`}>{year.yearLabel}</span>
+                            <span className={`font-semibold text-sm ${year.isEnabled === false ? 'text-slate-500' : 'text-slate-900'}`}>{year.yearLabel}</span>
                             {year.isEnabled === false ? (
                               <span className="badge badge-warning">Disabled</span>
                             ) : (
@@ -351,14 +372,14 @@ export default function DepartmentsPage() {
                           {year.isEnabled !== false && (
                             <div className="flex flex-wrap gap-1.5 mt-2">
                               {year.sections?.map((sec) => (
-                                <span key={sec.id} className="px-2.5 py-1 rounded-lg bg-surface-200 text-xs font-semibold text-gray-200 flex items-center gap-1 border border-white/5">
-                                  Sec {sec.name} <span className="text-[10px] text-gray-400">({sec.studentStrength} std)</span>
+                                <span key={sec.id} className="px-2.5 py-1 rounded-sm bg-surface text-xs font-semibold text-slate-700 flex items-center gap-1 border border-line">
+                                  Sec {sec.name} <span className="text-[10px] text-slate-500">({sec.studentStrength} std)</span>
                                 </span>
                               ))}
                             </div>
                           )}
                           {year.isEnabled === false && (
-                            <p className="text-[11px] text-gray-500 mt-2">Year disabled — no sections available.</p>
+                            <p className="text-[11px] text-slate-500 mt-2">Year disabled — no sections available.</p>
                           )}
                         </div>
                       ))}
@@ -376,55 +397,55 @@ export default function DepartmentsPage() {
         <div className="modal-backdrop" onClick={closeDeleteConfirm}>
           <div className="modal max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Trash2 className="w-5 h-5 text-danger" />
                 Confirm Permanent Delete
               </h3>
               <button onClick={closeDeleteConfirm} className="btn-icon"><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-6 space-y-4">
-              <p className="text-sm text-gray-300">
-                Are you sure you want to permanently delete <strong className="text-white">{deleteConfirmDept.name}</strong>?
+            <div className="p-4 space-y-4">
+              <p className="text-sm text-slate-700">
+                Are you sure you want to permanently delete <strong className="text-slate-900">{deleteConfirmDept.name}</strong>?
               </p>
 
               {deleteDepsLoading ? (
-                <div className="flex items-center gap-2 text-xs text-gray-400">
+                <div className="flex items-center gap-2 text-xs text-slate-600">
                   <Loader2 className="w-4 h-4 animate-spin" /> Checking dependencies…
                 </div>
               ) : deleteDependencies && (
-                <div className="rounded-xl border border-white/10 bg-surface-200/50 p-4 space-y-2">
-                  <p className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-2">What will happen:</p>
+                <div className="rounded-sm border border-line bg-slate-50 p-4 space-y-2">
+                  <p className="label-caps mb-2">What will happen:</p>
                   {deleteDependencies.timetables > 0 && (
-                    <p className="text-sm text-red-300">
+                    <p className="text-sm text-danger">
                       🗑️ <strong>{deleteDependencies.timetables}</strong> timetable{deleteDependencies.timetables !== 1 ? 's' : ''} and all their entries will be <strong>deleted</strong>
                     </p>
                   )}
                   {deleteDependencies.subjects > 0 && (
-                    <p className="text-sm text-red-300">
+                    <p className="text-sm text-danger">
                       🗑️ <strong>{deleteDependencies.subjects}</strong> subject{deleteDependencies.subjects !== 1 ? 's' : ''} will be <strong>deleted</strong>
                     </p>
                   )}
                   {deleteDependencies.faculty > 0 && (
-                    <p className="text-sm text-yellow-300">
+                    <p className="text-sm text-warning">
                       🔗 <strong>{deleteDependencies.faculty}</strong> faculty member{deleteDependencies.faculty !== 1 ? 's' : ''} will be <strong>unlinked</strong> (department removed, records kept)
                     </p>
                   )}
                   {deleteDependencies.classrooms > 0 && (
-                    <p className="text-sm text-yellow-300">
+                    <p className="text-sm text-warning">
                       🔗 <strong>{deleteDependencies.classrooms}</strong> classroom{deleteDependencies.classrooms !== 1 ? 's' : ''} will be <strong>unlinked</strong> (department removed, records kept)
                     </p>
                   )}
                   {deleteDependencies.users > 0 && (
-                    <p className="text-sm text-yellow-300">
+                    <p className="text-sm text-warning">
                       🔗 <strong>{deleteDependencies.users}</strong> user account{deleteDependencies.users !== 1 ? 's' : ''} will be <strong>unlinked</strong> (department removed, accounts kept)
                     </p>
                   )}
                   {!hasAnyDependencies && (
-                    <p className="text-sm text-green-300">
+                    <p className="text-sm text-success">
                       ✅ No dependent records — department will be deleted cleanly.
                     </p>
                   )}
-                  <p className="text-xs text-gray-500 mt-2 pt-2 border-t border-white/5">
+                  <p className="text-xs text-slate-500 mt-2 pt-2 border-t border-line">
                     Academic years and sections within this department will also be deleted.
                   </p>
                 </div>
@@ -440,7 +461,7 @@ export default function DepartmentsPage() {
                   type="button"
                   disabled={deleteMutation.isPending || deleteDepsLoading}
                   onClick={() => deleteConfirmDept && deleteMutation.mutate(deleteConfirmDept.id)}
-                  className="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
+                  className="bg-danger hover:brightness-110 text-white font-semibold py-2 px-4 rounded-sm transition-all disabled:opacity-50 disabled:cursor-not-allowed inline-flex items-center gap-2"
                 >
                   {deleteMutation.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
                   Permanently Delete
@@ -456,14 +477,14 @@ export default function DepartmentsPage() {
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-brand-400" />
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="w-5 h-5 text-accent-500" />
                 {editingDept ? 'Edit Department' : 'Create Department'}
               </h3>
               <button onClick={closeModal} className="btn-icon"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-4 space-y-4">
               <div className="form-group">
                 <label className="label">Department Name *</label>
                 <input
@@ -535,9 +556,9 @@ export default function DepartmentsPage() {
 
               {/* ── HOD Login Credentials (create only) ── */}
               {!editingDept && (
-                <div className="form-group border-t border-white/10 pt-3">
+                <div className="form-group border-t border-line pt-3">
                   <label className="label">HOD Login Credentials</label>
-                  <p className="text-[11px] text-gray-500 mb-2">
+                  <p className="text-[11px] text-slate-500 mb-2">
                     A login account (ROLE_HOD) will be created for this department with the credentials below.
                   </p>
                   <div className="grid grid-cols-2 gap-4">
@@ -566,21 +587,23 @@ export default function DepartmentsPage() {
               )}
 
               {/* ── Per-Year Section Selection (A–E) ── */}
-              <div className="form-group border-t border-white/10 pt-3">
+              <div className="form-group border-t border-line pt-3">
                 <label className="label">Academic Years & Sections</label>
-                <p className="text-[11px] text-gray-500 mb-2">Check the years that are active; disabled years are excluded from subjects, timetables and reports.</p>
+                <p className="text-[11px] text-slate-500 mb-2">Check the years that are active; disabled years are excluded from subjects, timetables and reports.</p>
                 <div className="space-y-3">
                   {(formData.years || []).map((year) => {
                     const isChecked = (sec: string) => year.sections?.includes(sec)
                     return (
-                      <div key={year.yearLabel} className={`p-3 rounded-xl border ${year.enabled ? 'bg-surface-100 border-white/5' : 'bg-surface-200/40 border-white/5'}`}>
+                      <div key={year.yearLabel} className={`p-3 rounded-sm border ${year.enabled ? 'bg-slate-50 border-line' : 'bg-slate-100/60 border-line'}`}>
                         <div className="flex items-center justify-between mb-2">
                           <button
                             type="button"
                             onClick={() => toggleYear(year.yearLabel)}
-                            className="flex items-center gap-2.5 text-sm font-semibold text-white hover:text-brand-300 transition-colors"
+                            className="flex items-center gap-2.5 text-sm font-semibold text-slate-900 hover:text-accent-700 transition-colors"
                           >
-                            <span className={`w-5 h-5 rounded-md border flex items-center justify-center ${year.enabled ? 'bg-brand-500 border-brand-500' : 'bg-surface-200 border-white/20'}`}>
+                            {/* Checkmark is white: on a solid accent fill a
+                                slate-900 tick was barely legible. */}
+                            <span className={`w-5 h-5 rounded-sm border flex items-center justify-center ${year.enabled ? 'bg-accent-500 border-accent-500' : 'bg-slate-100 border-slate-300'}`}>
                               {year.enabled ? <Check className="w-3.5 h-3.5 text-white" /> : null}
                             </span>
                             {year.yearLabel}
@@ -598,19 +621,19 @@ export default function DepartmentsPage() {
                                 type="button"
                                 key={sec}
                                 onClick={() => toggleSectionInYear(year.yearLabel, sec)}
-                                className={`py-2.5 rounded-xl border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
+                                className={`py-2.5 rounded-sm border text-xs font-bold flex items-center justify-center gap-1.5 transition-all ${
                                   isChecked(sec)
-                                    ? 'bg-emerald-500/25 border-emerald-500 text-emerald-300 shadow-glow'
-                                    : 'bg-surface-200 border-white/10 text-gray-400 hover:text-white'
+                                    ? 'bg-green-100 border-green-500 text-green-600 '
+                                    : 'bg-slate-100 border-line text-slate-600 hover:text-slate-900'
                                 }`}
                               >
-                                {isChecked(sec) ? <Check className="w-3.5 h-3.5 text-emerald-400" /> : <Square className="w-3.5 h-3.5 text-gray-500" />}
+                                {isChecked(sec) ? <Check className="w-3.5 h-3.5 text-green-600" /> : <Square className="w-3.5 h-3.5 text-slate-400" />}
                                 Sec {sec}
                               </button>
                             ))}
                           </div>
                         ) : (
-                          <p className="text-[11px] text-gray-500">No sections displayed because the year is disabled.</p>
+                          <p className="text-[11px] text-slate-500">No sections displayed because the year is disabled.</p>
                         )}
                       </div>
                     )

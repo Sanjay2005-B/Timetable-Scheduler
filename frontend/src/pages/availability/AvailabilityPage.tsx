@@ -90,7 +90,7 @@ export default function AvailabilityPage() {
   const selectedFaculty = facultyData?.find((f) => f.id === selectedFacultyId)
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="page-header">
         <div>
           <h1 className="page-title">Faculty Availability Matrix</h1>
@@ -109,8 +109,8 @@ export default function AvailabilityPage() {
       {/* Faculty Selector & Legend */}
       <div className="card p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-3">
-          <Users className="w-5 h-5 text-brand-400" />
-          <span className="text-sm font-semibold text-white">Select Faculty:</span>
+          <Users className="w-5 h-5 text-accent-600" />
+          <span className="text-sm font-semibold text-slate-900">Select Faculty:</span>
           <select
             className="input w-auto min-w-[260px]"
             value={selectedFacultyId || ''}
@@ -126,34 +126,36 @@ export default function AvailabilityPage() {
 
         {/* Legend */}
         <div className="flex items-center gap-4 text-xs">
-          <span className="flex items-center gap-1.5 text-brand-300 font-medium">
-            <Star className="w-3.5 h-3.5 fill-brand-400 text-brand-400" /> Preferred
+          <span className="flex items-center gap-1.5 text-accent-700 font-medium">
+            <Star className="w-3.5 h-3.5 fill-accent-600 text-accent-600" /> Preferred
           </span>
-          <span className="flex items-center gap-1.5 text-green-400 font-medium">
+          <span className="flex items-center gap-1.5 text-green-600 font-medium">
             <Check className="w-3.5 h-3.5" /> Available
           </span>
           <span className="flex items-center gap-1.5 text-danger font-medium">
             <Ban className="w-3.5 h-3.5" /> Blocked
           </span>
-          <span className="text-gray-500 italic">(Click cell to cycle)</span>
+          <span className="text-slate-500 italic">(Click cell to cycle)</span>
         </div>
       </div>
 
       {/* Interactive Matrix Grid */}
       {isAvailLoading ? (
         <div className="flex justify-center py-20">
-          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
       ) : (
-        <div className="table-container card">
+        /* `table-container` already carries its own border, radius, background
+           and overflow — the extra `card` here was a second surface + border. */
+        <div className="table-container">
           <table className="table border-collapse">
             <thead>
               <tr>
                 <th className="w-32">Day / Slot</th>
                 {timeSlots?.map((slot) => (
                   <th key={slot.id} className="text-center min-w-[110px]">
-                    <div className="font-bold text-white">{slot.slotLabel || `P${slot.slotOrder}`}</div>
-                    <div className="text-[10px] text-gray-400 font-normal">
+                    <div className="font-bold text-slate-900">{slot.slotLabel || `P${slot.slotOrder}`}</div>
+                    <div className="text-[10px] text-slate-600 font-normal">
                       {slot.startTime.substring(0, 5)} - {slot.endTime.substring(0, 5)}
                     </div>
                   </th>
@@ -163,13 +165,13 @@ export default function AvailabilityPage() {
             <tbody>
               {DAYS.map((day) => (
                 <tr key={day}>
-                  <td className="font-bold text-xs text-brand-300 bg-surface-100 uppercase tracking-wider">
+                  <td className="font-bold text-xs text-accent-700 bg-slate-50 uppercase tracking-wider">
                     {day}
                   </td>
                   {timeSlots?.map((slot) => {
                     if (slot.isBreak) {
                       return (
-                        <td key={slot.id} className="bg-surface-200/50 text-center text-xs text-gray-500 font-semibold py-4">
+                        <td key={slot.id} className="bg-slate-100/50 text-center text-xs text-slate-500 font-semibold py-4">
                           LUNCH BREAK
                         </td>
                       )
@@ -182,15 +184,15 @@ export default function AvailabilityPage() {
                         <button
                           type="button"
                           onClick={() => toggleSlotStatus(day, slot.id)}
-                          className={`w-full py-3.5 px-2 rounded-xl text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
+                          className={`w-full py-3.5 px-2 rounded-sm text-xs font-semibold flex items-center justify-center gap-1 transition-all ${
                             status === 'PREFERRED'
-                              ? 'bg-brand-500/25 border border-brand-500/50 text-brand-300 shadow-glow'
+                              ? 'bg-accent-50 border border-accent-200 text-accent-700'
                               : status === 'BLOCKED'
-                              ? 'bg-danger/20 border border-danger/40 text-danger'
-                              : 'bg-success/15 border border-success/30 text-green-300 hover:bg-success/25'
+                              ? 'bg-danger/10 border border-danger/30 text-danger'
+                              : 'bg-success/10 border border-success/30 text-success hover:bg-success/20'
                           }`}
                         >
-                          {status === 'PREFERRED' && <Star className="w-3.5 h-3.5 fill-brand-400" />}
+                          {status === 'PREFERRED' && <Star className="w-3.5 h-3.5 fill-accent-600" />}
                           {status === 'AVAILABLE' && <Check className="w-3.5 h-3.5" />}
                           {status === 'BLOCKED' && <Ban className="w-3.5 h-3.5" />}
                           {status}

@@ -14,7 +14,7 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-3 max-w-4xl">
       <div className="page-header">
         <div>
           <h1 className="page-title">System Settings</h1>
@@ -23,19 +23,19 @@ export default function SettingsPage() {
       </div>
 
       {saved && (
-        <div className="p-4 rounded-xl bg-success/15 border border-success/30 text-success text-xs font-semibold animate-fade-in">
+        <div className="p-4 rounded-sm bg-success/10 border border-success/30 text-success text-xs font-semibold animate-fade-in">
           ✅ Settings saved successfully!
         </div>
       )}
 
-      <form onSubmit={handleSave} className="space-y-6">
+      <form onSubmit={handleSave} className="space-y-5">
         {/* Working Days & Academic Session */}
-        <div className="card p-6 space-y-4">
-          <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-            <Calendar className="w-5 h-5 text-brand-400" /> Academic & Working Schedule
+        <div className="card p-5 space-y-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-line pb-3">
+            <Calendar className="w-5 h-5 text-accent-600" /> Academic & Working Schedule
           </h3>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
             <div className="form-group">
               <label className="label">Current Academic Session</label>
               <input
@@ -86,19 +86,19 @@ export default function SettingsPage() {
         </div>
 
         {/* Database & Security Summary */}
-        <div className="card p-6 space-y-4">
-          <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3">
-            <ShieldCheck className="w-5 h-5 text-emerald-400" /> Security & Database Defaults
+        <div className="card p-5 space-y-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-line pb-3">
+            <ShieldCheck className="w-5 h-5 text-green-600" /> Security & Database Defaults
           </h3>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-            <div className="p-4 rounded-xl bg-surface-100 space-y-1">
-              <span className="text-gray-400 block font-semibold">JWT Authentication</span>
-              <span className="text-gray-300">Alg: HS512 · Access Token: 15 min · Refresh: 7 days</span>
+            <div className="p-4 rounded-sm bg-slate-50 border border-line space-y-1">
+              <span className="text-slate-600 block font-semibold">JWT Authentication</span>
+              <span className="text-slate-700">Alg: HS512 · Access Token: 15 min · Refresh: 7 days</span>
             </div>
-            <div className="p-4 rounded-xl bg-surface-100 space-y-1">
-              <span className="text-gray-400 block font-semibold">Database Engine</span>
-              <span className="text-emerald-400 font-semibold">PostgreSQL 16 / H2 Compatible Mode</span>
+            <div className="p-4 rounded-sm bg-slate-50 border border-line space-y-1">
+              <span className="text-slate-600 block font-semibold">Database Engine</span>
+              <span className="text-green-600 font-semibold">PostgreSQL 16 / H2 Compatible Mode</span>
             </div>
           </div>
         </div>

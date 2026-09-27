@@ -109,61 +109,73 @@ export default function LoginPage() {
   }
 
   return (
-      <div className="min-h-screen bg-surface flex">
+      <div className="min-h-screen bg-canvas p-4 lg:p-6 flex gap-4 lg:gap-6">
 
-        {/* LEFT SIDE */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-brand-900 via-brand-800 to-surface relative overflow-hidden flex-col items-center justify-center p-12">
+        {/* LEFT SIDE — near-black ink cover panel, ruled, on the cream canvas.
+            The ink fill (not bg-nav) is deliberate: the whole panel is set in
+            light type, so it must stay dark in this palette. */}
+        <div className="hidden lg:flex flex-1 bg-ink border border-line relative overflow-hidden flex-col items-center justify-center p-12 rounded-sm">
 
-          <div className="absolute top-0 left-0 w-72 h-72 bg-brand-500/20 rounded-full -translate-x-1/3 -translate-y-1/3 blur-3xl" />
-
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-500/10 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl" />
+          {/* No decorative bloom: this design language is ruled and flat. */}
 
           <div className="relative z-10 max-w-md text-center">
 
-            <div className="w-20 h-20 rounded-3xl bg-gradient-brand mx-auto mb-8 flex items-center justify-center shadow-glow-lg">
-              <Zap className="w-10 h-10 text-white" />
+            <div className="flex items-center justify-center gap-3 mb-8">
+              <div className="w-12 h-12 rounded-sm bg-accent-500 border border-header flex items-center justify-center">
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+              <div className="text-left">
+                <p className="text-sm font-bold text-white leading-tight">
+                  Timetable Scheduler
+                </p>
+                <p className="text-[10px] text-white/40 tracking-wide">
+                  College Schedule ERP
+                </p>
+              </div>
             </div>
 
-            <h1 className="text-4xl font-bold text-white mb-4">
-              AI Timetable
+            <h1 className="text-4xl font-extrabold text-white mb-4 tracking-tight leading-[1.1]">
+              Timetable
               <br />
-              Scheduler ERP
+              Scheduler
             </h1>
 
-            <p className="text-gray-400 text-lg leading-relaxed">
+            <p className="text-white/60 text-base leading-relaxed">
               Intelligently generate conflict-free academic timetables for your
               entire college in seconds.
             </p>
 
-            <div className="flex flex-wrap justify-center gap-3 mt-10">
+            <div className="flex flex-wrap justify-center gap-2 mt-9">
               {[
                 'CSP Algorithm',
                 'No Conflicts',
                 'PDF & Excel Export',
-                'Dark Mode',
                 'Real-time',
               ].map((feature) => (
                   <span
                       key={feature}
-                      className="badge badge-brand text-xs py-1 px-3"
+                      className="text-[11px] font-medium text-white/70 bg-white/[0.05] border border-white/20 rounded-sm px-3 py-1"
                   >
                 {feature}
-              </span>
+                  </span>
               ))}
             </div>
 
-            <div className="grid grid-cols-3 gap-4 mt-10">
+            <div className="grid grid-cols-3 gap-3 mt-9">
               {[
                 { value: '1000+', label: 'Faculty' },
                 { value: '50+', label: 'Departments' },
                 { value: '100%', label: 'Conflict-Free' },
               ].map(({ value, label }) => (
-                  <div key={label} className="glass-card p-4">
-                    <p className="text-2xl font-bold text-gradient">
+                  <div
+                      key={label}
+                      className="bg-white/[0.05] border border-white/20 rounded-sm px-3 py-4"
+                  >
+                    <p className="text-2xl font-extrabold text-white tabular-nums">
                       {value}
                     </p>
 
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="label-caps text-white/40 mt-1">
                       {label}
                     </p>
                   </div>
@@ -173,56 +185,60 @@ export default function LoginPage() {
           </div>
         </div>
 
-        {/* RIGHT SIDE */}
-        <div className="flex-1 flex items-center justify-center p-6">
+        {/* RIGHT SIDE — near-white form card, ruled, on the cream canvas */}
+        <div className="flex-1 max-w-[480px] bg-surface border border-line rounded-sm flex items-center overflow-y-auto">
 
-          <div className="w-full max-w-md animate-slide-up">
+          <div className="w-full px-8 py-10 animate-slide-up">
+
 
             {/* MOBILE LOGO */}
             <div className="flex items-center gap-3 mb-8 lg:hidden">
 
-              <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow">
-                <Zap className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 rounded-sm bg-accent-500 border border-line flex items-center justify-center">
+                <Zap className="w-4 h-4 text-white" />
               </div>
 
               <div>
-                <p className="font-bold text-white">
-                  Timetable ERP
+                <p className="font-bold text-slate-900">
+                  Timetable Scheduler
                 </p>
 
-                <p className="text-xs text-gray-500">
-                  AI Scheduler
+                <p className="text-xs text-slate-500">
+                  College Schedule ERP
                 </p>
               </div>
 
             </div>
 
-            <h2 className="text-3xl font-bold text-white mb-2">
+            <h2 className="page-title text-3xl mb-2">
               {selectedLoginType.label} Login
             </h2>
 
-            <p className="text-gray-400 mb-4">
+            <p className="text-slate-600 mb-6 text-sm">
               {selectedLoginType.tagline}
             </p>
 
             {/* ── Login Type Selector ── */}
-            <div className="mb-6">
-              <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">
+            <div className="mb-5">
+              <p className="label-caps mb-2">
                 Select Login Type
               </p>
 
               <div className="grid grid-cols-2 gap-2">
-                {LOGIN_TYPES.map(({ role, label }) => (
+                {LOGIN_TYPES.map(({ role, label }, i) => (
                     <button
                         key={role}
                         type="button"
                         onClick={() => setLoginType(role)}
                         aria-pressed={loginType === role}
+                        /* The third option spans the full row so the 2-column
+                           grid does not leave a lopsided gap. */
                         className={clsx(
-                            'rounded-xl border px-3 py-2 text-xs font-semibold transition-all',
+                            'rounded-sm border px-3 py-2.5 text-xs font-semibold transition-all',
+                            i === 2 && 'col-span-2',
                             loginType === role
-                                ? 'bg-brand-500/20 border-brand-500/50 text-white'
-                                : 'bg-surface-100 border-white/10 text-gray-400 hover:border-white/25 hover:text-gray-200'
+                                ? 'bg-accent-50 border-accent-300 text-accent-700'
+                                : 'bg-white border-line text-slate-600 hover:border-slate-300 hover:text-slate-700'
                         )}
                     >
                       {label}
@@ -233,7 +249,7 @@ export default function LoginPage() {
 
             {/* ERROR */}
             {error && (
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
+                <div className="flex items-center gap-3 p-3.5 rounded-sm bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
 
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
 
@@ -309,7 +325,7 @@ export default function LoginPage() {
                   <button
                       type="button"
                       onClick={() => setShowPass((value) => !value)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-sm text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors"
                       aria-label={
                         showPass
                             ? 'Hide password'
@@ -326,11 +342,11 @@ export default function LoginPage() {
 
                 </div>
 
-                <div className="flex justify-end mt-1.5">
+                <div className="flex justify-end mt-2">
 
                   <Link
                     to="/forgot-password"
-                    className="text-xs text-brand-400 hover:text-brand-300"
+                    className="text-xs text-slate-500 hover:text-slate-900 hover:underline transition-colors"
                   >
                     Forgot password?
                   </Link>
@@ -362,16 +378,16 @@ export default function LoginPage() {
 
             {/* NEW COLLEGE REGISTRATION (College Admin section only) */}
             {loginType === 'ROLE_COLLEGE_ADMIN' && (
-                <div className="mt-6 text-center border-t border-white/10 pt-5">
+                <div className="mt-6 text-center border-t border-line pt-5">
 
-                  <p className="text-xs text-gray-500 mb-2">
+                  <p className="text-xs text-slate-500 mb-2">
                     First-time college?
                   </p>
 
                   <button
                       type="button"
                       onClick={() => navigate('/register-college')}
-                      className="text-xs font-semibold text-brand-400 hover:text-brand-300"
+                      className="text-xs font-semibold text-slate-700 hover:text-slate-900 hover:underline transition-colors"
                   >
                     Create College Admin Account →
                   </button>

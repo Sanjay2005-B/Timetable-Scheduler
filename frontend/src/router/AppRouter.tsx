@@ -25,7 +25,7 @@ const MySubjectsPage    = lazy(() => import('@/pages/subjects/MySubjectsPage'))
 
 const PageLoader = () => (
   <div className="flex items-center justify-center h-[60vh]">
-    <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+    <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
   </div>
 )
 

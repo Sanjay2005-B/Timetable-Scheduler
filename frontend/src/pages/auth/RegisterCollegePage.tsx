@@ -142,42 +142,42 @@ export default function RegisterCollegePage() {
   }
 
   return (
-      <div className="min-h-screen bg-surface flex">
+      <div className="min-h-screen bg-canvas flex">
 
         {/* LEFT SIDE */}
-        <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-brand-900 via-brand-800 to-surface relative overflow-hidden flex-col items-center justify-center p-12">
+        <div className="hidden lg:flex lg:w-1/2 bg-ink relative overflow-hidden flex-col items-center justify-center p-12">
 
-          <div className="absolute top-0 left-0 w-72 h-72 bg-brand-500/20 rounded-full -translate-x-1/3 -translate-y-1/3 blur-3xl" />
 
-          <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-500/10 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl" />
 
           <div className="relative z-10 max-w-md text-center">
 
-            <div className="w-20 h-20 rounded-3xl bg-gradient-brand mx-auto mb-8 flex items-center justify-center shadow-glow-lg">
-              <Zap className="w-10 h-10 text-white" />
+            <div className="w-14 h-14 rounded-sm bg-ink mx-auto mb-6 flex items-center justify-center border border-white/15 ">
+              <Zap className="w-6 h-6 text-white" />
             </div>
 
             <h1 className="text-4xl font-bold text-white mb-4">
-              AI Timetable
+              Timetable
               <br />
-              Scheduler ERP
+              Scheduler
             </h1>
 
-            <p className="text-gray-400 text-lg leading-relaxed">
+            <p className="text-slate-400 text-lg leading-relaxed">
               Register your college and create its first College Admin account.
               No existing account is needed.
             </p>
 
             <div className="flex flex-wrap justify-center gap-3 mt-10">
+              {/* 'Dark Mode' was dropped from this feature list â€” the app has no
+                  dark theme, so the badge advertised a non-existent capability.
+                  Chip styling now matches the approved LoginPage dark hero. */}
               {[
                 'Self Registration',
                 'Secure Login',
                 'Per-College Data',
-                'Dark Mode',
               ].map((feature) => (
                   <span
                       key={feature}
-                      className="badge badge-brand text-xs py-1 px-3"
+                      className="text-[11px] font-medium text-white/70 bg-white/[0.05] border border-white/20 rounded-sm px-3 py-1"
                   >
                 {feature}
               </span>
@@ -188,52 +188,52 @@ export default function RegisterCollegePage() {
         </div>
 
         {/* RIGHT SIDE */}
-        <div className="flex-1 flex items-center justify-center p-6 py-12">
+        <div className="flex-1 flex items-center justify-center p-4 py-12">
 
           <div className="w-full max-w-md animate-slide-up">
 
             {/* MOBILE LOGO */}
             <div className="flex items-center gap-3 mb-8 lg:hidden">
 
-              <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow">
-                <Zap className="w-5 h-5 text-white" />
+              <div className="w-9 h-9 rounded-sm bg-ink flex items-center justify-center border border-white/15 ">
+                <Zap className="w-4 h-4 text-white" />
               </div>
 
               <div>
-                <p className="font-bold text-white">
-                  Timetable ERP
+                <p className="font-bold text-slate-900">
+                  Timetable Scheduler
                 </p>
 
-                <p className="text-xs text-gray-500">
-                  AI Scheduler
+                <p className="text-xs text-slate-500">
+                  College Schedule ERP
                 </p>
               </div>
 
             </div>
 
-            <h2 className="text-3xl font-bold text-white mb-2">
+            <h2 className="text-3xl font-bold text-slate-900 mb-2">
               Create College Admin Account
             </h2>
 
-            <p className="text-gray-400 mb-6">
+            <p className="text-slate-600 mb-4">
               Register your college. The first College Admin account is created
               automatically.
             </p>
 
             {/* SUCCESS */}
             {registered && (
-                <div className="flex items-start gap-3 p-4 rounded-xl bg-success/10 border border-success/30 text-success text-sm mb-5 animate-slide-up">
+                <div className="flex items-start gap-3 p-4 rounded-sm bg-success/10 border border-success/30 text-success text-sm mb-5 animate-slide-up">
 
                   <CheckCircle2 className="w-4 h-4 flex-shrink-0 mt-0.5 text-success" />
 
                   <div>
-                    <p className="font-semibold text-white">
+                    <p className="font-semibold text-slate-900">
                       College registered successfully!
                     </p>
 
-                    <p className="text-gray-400 mt-1 text-xs">
+                    <p className="text-slate-600 mt-1 text-xs">
                       {registeredName} has been created. Sign in with Login ID{' '}
-                      <span className="font-mono text-white">{registeredUsername}</span>{' '}
+                      <span className="font-mono text-slate-900">{registeredUsername}</span>{' '}
                       and your chosen password. Redirecting to login...
                     </p>
                   </div>
@@ -243,7 +243,7 @@ export default function RegisterCollegePage() {
 
             {/* ERROR */}
             {error && (
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
+                <div className="flex items-center gap-3 p-4 rounded-sm bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
 
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
 
@@ -253,13 +253,13 @@ export default function RegisterCollegePage() {
             )}
 
             {/* BACK TO LOGIN */}
-            <div className="mb-6 -mt-2">
+            <div className="mb-4 -mt-2">
               <button
                   type="button"
                   onClick={() => navigate('/login')}
-                  className="text-xs text-brand-400 hover:text-brand-300"
+                  className="text-xs text-accent-600 hover:text-accent-700"
               >
-                ← Back to College Admin Login
+                â† Back to College Admin Login
               </button>
             </div>
 
@@ -270,9 +270,9 @@ export default function RegisterCollegePage() {
             >
 
               {/* COLLEGE INFORMATION */}
-              <section className="rounded-xl bg-surface-100 border border-white/10 p-4 space-y-4">
+              <section className="rounded-sm bg-surface border border-line p-4 space-y-4">
 
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                   College Information
                 </p>
 
@@ -388,9 +388,9 @@ export default function RegisterCollegePage() {
               </section>
 
               {/* ADMIN LOGIN INFORMATION */}
-              <section className="rounded-xl bg-surface-100 border border-white/10 p-4 space-y-4">
+              <section className="rounded-sm bg-surface border border-line p-4 space-y-4">
 
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                <p className="text-[10px] font-semibold uppercase tracking-widest text-slate-500">
                   College Admin Login Information
                 </p>
 
@@ -443,7 +443,7 @@ export default function RegisterCollegePage() {
                     <button
                         type="button"
                         onClick={() => setShowPass((value) => !value)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
                         aria-label={showPass ? 'Hide password' : 'Show password'}
                         disabled={loading || registered}
                     >
@@ -482,7 +482,7 @@ export default function RegisterCollegePage() {
                     <button
                         type="button"
                         onClick={() => setShowConfirm((value) => !value)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300"
+                        className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-700"
                         aria-label={showConfirm ? 'Hide confirm password' : 'Show confirm password'}
                         disabled={loading || registered}
                     >
@@ -513,7 +513,7 @@ export default function RegisterCollegePage() {
                       Registering...
                     </>
                 ) : registered ? (
-                    'Registered ✓'
+                    'Registered âœ“'
                 ) : (
                     'Create College Admin Account'
                 )}

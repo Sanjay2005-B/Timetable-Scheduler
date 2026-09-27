@@ -1,8 +1,8 @@
 import { NavLink, useLocation, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Building2, GraduationCap, Users, BookOpen, BookMarked,
-  DoorOpen, CalendarCheck, Calendar, BarChart3, Settings,
-  ChevronRight, Zap
+  LayoutDashboard, Building2, Users, BookOpen, BookMarked,
+  DoorOpen, CalendarCheck, Calendar, Settings,
+  Zap, X
 } from 'lucide-react'
 import { useAuthStore } from '@/store/authStore'
 import clsx from 'clsx'
@@ -14,6 +14,11 @@ const MANAGEMENT_STAFF_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_COLLEGE_ADMIN', 'ROLE_
 // Master-data pages that must NOT be visible to College Admins (view-only
 // timetable scope). HOD / EXAM_COORDINATOR / SUPER_ADMIN keep them.
 const SUBJECT_AVAILABILITY_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_HOD', 'ROLE_EXAM_COORDINATOR']
+
+// Availability is not part of the HOD's read-only department scope, so
+// ROLE_HOD is deliberately absent. Kept separate from
+// SUBJECT_AVAILABILITY_ROLES because Subjects stays visible to an HOD.
+const AVAILABILITY_ROLES = ['ROLE_SUPER_ADMIN', 'ROLE_EXAM_COORDINATOR']
 
 const NAV_ITEMS = [
   {
@@ -31,7 +36,7 @@ const NAV_ITEMS = [
       { to: '/faculty',      icon: Users,           label: 'Faculty',      roles: MANAGEMENT_STAFF_ROLES },
       { to: '/subjects',     icon: BookOpen,        label: 'Subjects',     roles: SUBJECT_AVAILABILITY_ROLES },
       { to: '/classrooms',   icon: DoorOpen,        label: 'Classrooms',   roles: MANAGEMENT_STAFF_ROLES },
-      { to: '/availability', icon: CalendarCheck,   label: 'Availability', roles: SUBJECT_AVAILABILITY_ROLES },
+      { to: '/availability', icon: CalendarCheck,   label: 'Availability', roles: AVAILABILITY_ROLES },
     ],
   },
   {
@@ -43,120 +48,137 @@ const NAV_ITEMS = [
   {
     group: 'System',
     items: [
-      { to: '/settings', icon: Settings, label: 'Settings', roles: ['ROLE_SUPER_ADMIN', 'ROLE_COLLEGE_ADMIN', 'ROLE_HOD'] },
+      { to: '/settings', icon: Settings, label: 'Settings', roles: ['ROLE_SUPER_ADMIN', 'ROLE_COLLEGE_ADMIN'] },
     ],
   },
 ]
 
 interface SidebarProps {
   collapsed: boolean
+  /** Mobile slide-in drawer state. */
+  mobileOpen: boolean
+  onCloseMobile: () => void
 }
 
-export default function Sidebar({ collapsed }: SidebarProps) {
+export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: SidebarProps) {
   const { user, hasRole } = useAuthStore()
   const location  = useLocation()
   const navigate  = useNavigate()
 
+  const railCollapsed = collapsed && !mobileOpen
+
   return (
-    <aside
-      className={clsx(
-        'fixed left-0 top-0 h-full z-30 flex flex-col',
-        'bg-surface-50 border-r border-white/5',
-        'transition-all duration-300',
-        collapsed ? 'w-16' : 'w-[260px]'
-      )}
-    >
-      {/* ── Logo ── */}
-      <div className="flex items-center gap-3 px-4 h-16 border-b border-white/5 flex-shrink-0">
-        <div className="w-9 h-9 rounded-xl bg-gradient-brand flex items-center justify-center flex-shrink-0 shadow-glow">
-          <Zap className="w-5 h-5 text-white" />
-        </div>
-        {!collapsed && (
-          <div className="overflow-hidden">
-            <p className="text-sm font-bold text-white leading-tight truncate">
-              Timetable ERP
-            </p>
-            <p className="text-[10px] text-gray-500 leading-tight">AI Scheduler</p>
-          </div>
-        )}
-      </div>
-
-      {/* ── Navigation ── */}
-      <nav className="flex-1 overflow-y-auto py-4 no-scrollbar">
-        {NAV_ITEMS.map((group) => {
-          const items = group.items.filter(
-            (item) => !item.roles || item.roles.some((r) => hasRole(r)),
-          )
-          if (items.length === 0) return null
-          return (
-          <div key={group.group} className="mb-6">
-            {!collapsed && (
-              <p className="px-4 mb-1.5 text-[10px] font-semibold uppercase tracking-widest text-gray-600">
-                {group.group}
-              </p>
-            )}
-            <div className="space-y-0.5 px-2">
-              {items
-                .map(({ to, icon: Icon, label }) => {
-                const isActive = location.pathname.startsWith(to)
-                return (
-                  <NavLink
-                    key={to}
-                    to={to}
-                    title={collapsed ? label : undefined}
-                    className={clsx(
-                      'flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium',
-                      'transition-all duration-150 group relative',
-                      isActive
-                        ? 'bg-brand-500/15 text-white border border-brand-500/25'
-                        : 'text-gray-400 hover:text-white hover:bg-white/[0.06]'
-                    )}
-                  >
-                    <Icon
-                      className={clsx(
-                        'w-5 h-5 flex-shrink-0',
-                        isActive ? 'text-brand-400' : 'text-gray-500 group-hover:text-gray-300'
-                      )}
-                    />
-                    {!collapsed && (
-                      <>
-                        <span className="flex-1">{label}</span>
-                        {isActive && (
-                          <ChevronRight className="w-3.5 h-3.5 text-brand-400" />
-                        )}
-                      </>
-                    )}
-                  </NavLink>
-                )
-              })}
-            </div>
-          </div>
-          )
-        })}
-      </nav>
-
-      {/* ── User Profile ── */}
-      <div className="flex-shrink-0 p-3 border-t border-white/5">
+    <>
+      {/* ── Mobile overlay ── */}
+      {mobileOpen && (
         <div
-          className={clsx(
-            'flex items-center gap-3 px-2 py-2 rounded-xl',
-            'hover:bg-white/[0.05] transition-colors cursor-pointer'
-          )}
-          onClick={() => navigate('/profile')}
-          title="My Profile"
-          role="button"
-        >
-          <div className="w-8 h-8 rounded-full bg-gradient-brand flex items-center justify-center flex-shrink-0 text-xs font-bold text-white">
-            {user?.fullName?.charAt(0) ?? 'A'}
+          className="fixed inset-0 z-30 bg-[#1a1a1a]/50 lg:hidden"
+          onClick={onCloseMobile}
+          aria-hidden="true"
+        />
+      )}
+
+      {/* Fixed cream rail — full height, flush to the left edge, ruled with a
+          thin black border. Dense and rectangular, per the reference. */}
+      <aside
+        className={clsx(
+          'fixed top-0 bottom-0 left-0 z-40 flex flex-col overflow-hidden',
+          'bg-nav text-ink border-r border-line',
+          'transition-all duration-200 ease-in-out',
+          // Mobile: off-canvas drawer. Desktop: static fixed column.
+          mobileOpen ? 'w-[216px]' : '-translate-x-full',
+          'lg:translate-x-0',
+          railCollapsed ? 'lg:w-[60px]' : 'lg:w-[216px]'
+        )}
+        aria-label="Main navigation"
+      >
+        {/* ── Logo ── */}
+        <div className="flex items-center gap-2 px-3 h-12 border-b border-line flex-shrink-0 bg-surface">
+          <div className="w-6 h-6 rounded-sm bg-accent-500 border border-line flex items-center justify-center flex-shrink-0">
+            <Zap className="w-3.5 h-3.5 text-white" />
           </div>
-          {!collapsed && (
-            <div className="min-w-0">
-              <p className="text-sm font-medium text-white truncate">{user?.fullName}</p>
-              <p className="text-[11px] text-gray-500 truncate">{user?.email}</p>
+          {!railCollapsed && (
+            <div className="overflow-hidden">
+              <p className="text-[11px] font-bold text-ink leading-tight truncate uppercase">
+                Timetable Scheduler
+              </p>
+              <p className="text-[9px] text-ink-soft leading-tight tracking-wider uppercase">College Schedule ERP</p>
             </div>
           )}
+          {/* Close control — mobile drawer only */}
+          <button
+            onClick={onCloseMobile}
+            className="ml-auto lg:hidden p-1 rounded-sm text-ink hover:bg-slate-200 transition-colors"
+            aria-label="Close navigation"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
-      </div>
-    </aside>
+
+        {/* ── Navigation ── */}
+        <nav className="flex-1 overflow-y-auto py-2 px-2 no-scrollbar">
+          {NAV_ITEMS.map((group) => {
+            const items = group.items.filter(
+              (item) => !item.roles || item.roles.some((r) => hasRole(r)),
+            )
+            if (items.length === 0) return null
+            return (
+            <div key={group.group} className="mb-3 last:mb-0">
+              {!railCollapsed && (
+                <p className="nav-section-label px-2 mb-1">
+                  {group.group}
+                </p>
+              )}
+              <div className="space-y-0.5">
+                {items
+                  .map(({ to, icon: Icon, label }) => {
+                  const isActive = location.pathname.startsWith(to)
+                  return (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      onClick={onCloseMobile}
+                      title={railCollapsed ? label : undefined}
+                      className={clsx(
+                        'nav-item group',
+                        isActive && 'nav-item-active'
+                      )}
+                    >
+                      <Icon className="w-3.5 h-3.5 flex-shrink-0" strokeWidth={2} />
+                      {!railCollapsed && <span className="flex-1 truncate">{label}</span>}
+                    </NavLink>
+                  )
+                })}
+              </div>
+            </div>
+            )
+          })}
+        </nav>
+
+        {/* ── User Profile ──
+            Sign-out is intentionally NOT duplicated here. It already exists in
+            two pre-existing places — the topbar account menu and the Profile
+            security section — and both share one session-revocation helper.
+            A third control would repeat that call and the redirect. */}
+        <div className="flex-shrink-0 p-2 border-t border-line">
+          <div
+            className="flex items-center gap-2 px-1.5 py-1.5 rounded-sm hover:bg-gold-100 transition-colors cursor-pointer"
+            onClick={() => { onCloseMobile(); navigate('/profile') }}
+            title="My Profile"
+            role="button"
+          >
+            <div className="w-6 h-6 rounded-sm bg-ink border border-line flex items-center justify-center flex-shrink-0 text-[10px] font-bold text-surface">
+              {user?.fullName?.charAt(0) ?? 'A'}
+            </div>
+            {!railCollapsed && (
+              <div className="min-w-0">
+                <p className="text-[11px] font-semibold text-ink truncate">{user?.fullName}</p>
+                <p className="text-[9px] text-ink-soft truncate">{user?.email}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      </aside>
+    </>
   )
 }

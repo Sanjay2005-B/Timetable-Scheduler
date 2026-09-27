@@ -65,7 +65,7 @@ export default function ReportsPage() {
   })
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <div className="page-header">
         <div>
           <h1 className="page-title">Report & Analytics Centre</h1>
@@ -77,47 +77,47 @@ export default function ReportsPage() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
         <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-brand-500/20 text-brand-400 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-sm bg-accent-50 text-accent-600 flex items-center justify-center">
             <Users className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{facultyList?.length || 0}</p>
-            <p className="text-xs text-gray-400">Total Faculty Members</p>
+            <p className="text-2xl font-bold text-slate-900">{facultyList?.length || 0}</p>
+            <p className="text-xs text-slate-600">Total Faculty Members</p>
           </div>
         </div>
 
         <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-sm bg-green-100 text-green-600 flex items-center justify-center">
             <DoorOpen className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">{roomReport?.totalRooms || 0}</p>
-            <p className="text-xs text-gray-400">Available Classrooms</p>
+            <p className="text-2xl font-bold text-slate-900">{roomReport?.totalRooms || 0}</p>
+            <p className="text-xs text-slate-600">Available Classrooms</p>
           </div>
         </div>
 
         <div className="card p-5 flex items-center gap-4">
-          <div className="w-12 h-12 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center">
+          <div className="w-12 h-12 rounded-sm bg-teal-100 text-teal-600 flex items-center justify-center">
             <BarChart3 className="w-6 h-6" />
           </div>
           <div>
-            <p className="text-2xl font-bold text-white">100%</p>
-            <p className="text-xs text-gray-400">Timetable Accuracy Rate</p>
+            <p className="text-2xl font-bold text-slate-900">100%</p>
+            <p className="text-xs text-slate-600">Timetable Accuracy Rate</p>
           </div>
         </div>
       </div>
 
       {/* Faculty Individual Schedule Report */}
-      <div className="card p-6 space-y-4">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-white/10 pb-4">
-          <h3 className="text-base font-bold text-white flex items-center gap-2">
-            <FileText className="w-5 h-5 text-brand-400" /> Faculty Schedule Report
+      <div className="card p-4 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-line pb-4">
+          <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+            <FileText className="w-5 h-5 text-accent-600" /> Faculty Schedule Report
           </h3>
 
           <div className="flex items-center gap-3">
-            <span className="text-xs text-gray-400">Faculty:</span>
+            <span className="text-xs text-slate-600">Faculty:</span>
             <select
               className="input w-auto min-w-[240px]"
               value={selectedFacultyId || ''}
@@ -132,65 +132,73 @@ export default function ReportsPage() {
 
         {facultyReport ? (
           <div className="space-y-3">
-            <div className="flex items-center justify-between text-xs text-gray-400 bg-surface-100 p-3 rounded-xl">
-              <span>Assigned Total Weekly Periods: <strong className="text-white text-sm">{facultyReport.assignedPeriodsCount} periods</strong></span>
-              <span>Faculty: <strong className="text-brand-300">{facultyReport.faculty}</strong></span>
+            <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 border border-line p-3 rounded-sm">
+              <span>Assigned Total Weekly Periods: <strong className="text-slate-900 text-sm">{facultyReport.assignedPeriodsCount} periods</strong></span>
+              <span>Faculty: <strong className="text-accent-700">{facultyReport.faculty}</strong></span>
             </div>
 
             {columns.length === 0 ? (
-              <p className="text-xs text-gray-500 py-6 text-center">
+              <p className="text-xs text-slate-500 py-6 text-center">
                 Time slot master is unavailable — cannot render the weekly grid.
               </p>
             ) : (
-              <div className="card overflow-x-auto p-4">
+              /* Was `card overflow-x-auto p-4` nested inside a `card` parent — a
+                 double surface. The parent card already supplies the padding. */
+              <div className="overflow-x-auto">
                 <table className="w-full text-left border-collapse">
                   <thead>
-                    <tr className="border-b border-white/10">
-                      <th className="px-2 py-1.5 text-[11px] font-bold text-gray-400 uppercase w-24">Day / Slot</th>
+                    <tr className="border-b border-line">
+                      <th className="px-2 py-1.5 text-[11px] font-bold text-slate-600 uppercase w-24">Day / Slot</th>
                       {columns.map((col) => (
-                        <th key={col.key} className="px-2 py-1.5 text-[11px] font-bold text-gray-300 text-center min-w-[140px]">
+                        <th key={col.key} className="px-2 py-1.5 text-[11px] font-bold text-slate-700 text-center min-w-[140px]">
                           {col.label}
                         </th>
                       ))}
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-white/5">
+                  {/* Was `divide-y divide-white/5` — invisible on the near-white card. */}
+                  <tbody>
                     {DAYS.map((day) => (
-                      <tr key={day} className="hover:bg-white/[0.02]">
-                        <td className="px-2 py-1.5 text-[11px] font-bold text-brand-300 uppercase tracking-wider bg-surface-100/50">
+                      <tr key={day} className="hover:bg-slate-50">
+                        <td className="px-2 py-1.5 text-[11px] font-bold text-accent-700 uppercase tracking-wider bg-slate-50">
                           {day}
                         </td>
                         {columns.map((col) => {
                           const entry = entryMap.get(`${day}_${col.key}`)
                           if (!entry) {
                             return (
-                              <td key={col.key} className="p-1.5 text-center text-[11px] border border-white/5">
-                                <span className="text-gray-600 italic">FREE</span>
+                              <td key={col.key} className="p-1.5 text-center text-[11px] border border-line">
+                                <span className="text-slate-500 italic">FREE</span>
                               </td>
                             )
                           }
                           const isLab = entry.isLab
                           return (
-                            <td key={col.key} className="p-1 border border-white/5 relative group">
+                            <td key={col.key} className="p-1 border border-line relative group">
+                              {/* LAB vs THEORY now mirrors the text badge (LAB =
+                                  accent, THEORY = neutral) rather than the old
+                                  near-identical brand-600/15 vs brand-500/15 blues. */}
                               <div
-                                className={`px-2 py-1.5 rounded-md space-y-0.5 transition-all ${
+                                className={`px-2 py-1.5 rounded-sm space-y-0.5 transition-all ${
                                   isLab
-                                    ? 'bg-purple-500/15 border border-purple-500/30'
-                                    : 'bg-brand-500/15 border border-brand-500/30'
+                                    ? 'bg-accent-50 border border-accent-200'
+                                    : 'bg-slate-50 border border-line'
                                 }`}
                               >
                                 <div className="flex items-center gap-1">
-                                  <span className="font-bold text-[11px] text-white">{entry.subjectCode}</span>
-                                  <span className={`text-[9px] px-1 py-px rounded font-semibold ${isLab ? 'bg-purple-500/30 text-purple-200' : 'bg-brand-500/30 text-brand-200'}`}>
+                                  <span className="font-bold text-[11px] text-slate-900">{entry.subjectCode}</span>
+                                  <span className={`text-[9px] px-1 py-px rounded font-semibold ${isLab ? 'bg-accent-50 text-accent-700' : 'bg-slate-200 text-slate-700'}`}>
                                     {isLab ? 'LAB' : 'THEORY'}
                                   </span>
                                 </div>
-                                <div className="text-[10px] font-medium text-gray-200 truncate">{entry.subjectName}</div>
-                                <div className="text-[9px] text-gray-400 flex items-center gap-1">
-                                  <User className="w-2.5 h-2.5 text-violet-400" /> {entry.yearLabel} Sec {entry.sectionName}
+                                <div className="text-[10px] font-medium text-slate-700 truncate">{entry.subjectName}</div>
+                                <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                                  {/* `text-lavender-500` was an UNDEFINED utility (dead
+                                      class) and rendered as no colour at all. */}
+                                  <User className="w-2.5 h-2.5 text-slate-500" /> {entry.yearLabel} Sec {entry.sectionName}
                                 </div>
-                                <div className="text-[9px] text-gray-400 flex items-center gap-1">
-                                  <Building2 className="w-2.5 h-2.5 text-emerald-400" /> {entry.roomNumber}
+                                <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                                  <Building2 className="w-2.5 h-2.5 text-green-600" /> {entry.roomNumber}
                                 </div>
                               </div>
                             </td>
@@ -204,13 +212,13 @@ export default function ReportsPage() {
             )}
 
             {!facultyReport.entries || facultyReport.entries.length === 0 ? (
-              <p className="text-xs text-gray-500 py-3 text-center flex items-center justify-center gap-1.5">
+              <p className="text-xs text-slate-500 py-3 text-center flex items-center justify-center gap-1.5">
                 <CalendarClock className="w-3.5 h-3.5" /> No scheduled periods found for this faculty member yet.
               </p>
             ) : null}
           </div>
         ) : (
-          <p className="text-xs text-gray-500 py-6 text-center">Select a faculty member above to view their schedule report.</p>
+          <p className="text-xs text-slate-500 py-6 text-center">Select a faculty member above to view their schedule report.</p>
         )}
       </div>
     </div>

@@ -7,6 +7,7 @@ import { timetableApi, TimetableResponse, TimetableEntryDto } from '@/api/timeta
 import { departmentApi, DepartmentResponse } from '@/api/departmentApi'
 import { availabilityApi, TimeSlot } from '@/api/availabilityApi'
 import { useAuthStore } from '@/store/authStore'
+import { useHodScope } from '@/hooks/useHodScope'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
@@ -17,11 +18,14 @@ const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 const defaultSemester = (): number => (new Date().getMonth() + 1 >= 7 ? 1 : 2)
 
 const toolbarSelectClass =
-  'h-10 w-full appearance-none rounded-xl border border-white/10 bg-surface-100 pl-9 pr-9 text-sm font-medium text-white outline-none transition-all hover:border-white/20 focus:border-brand-500/50 focus:ring-2 focus:ring-brand-500/25'
+  'h-10 w-full appearance-none rounded-sm border border-line bg-white pl-9 pr-9 text-sm font-medium text-slate-900 outline-none transition-all hover:border-slate-300 focus:border-accent-500/50 focus:ring-2 focus:ring-accent-500/25'
 
 export default function TimetablePage() {
   const { hasRole } = useAuthStore()
   const canGenerate = hasRole('ROLE_HOD') || hasRole('ROLE_EXAM_COORDINATOR') || hasRole('ROLE_SUPER_ADMIN')
+  // The backend already confines an HOD to their own department for both the
+  // section read and generation; the selector is locked to match.
+  const { isHod } = useHodScope()
 
   const [selectedDeptId, setSelectedDeptId] = useState<number | null>(null)
   const [selectedYearId, setSelectedYearId] = useState<number | null>(null)
@@ -145,16 +149,16 @@ export default function TimetablePage() {
     : columns.length * DAYS.length
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       {/* ── Toast Notification Banner ── */}
       {toastMessage && (
-        <div className={`p-4 rounded-xl font-semibold text-xs animate-fade-in flex items-center justify-between ${
+        <div className={`p-4 rounded-sm font-semibold text-xs animate-fade-in flex items-center justify-between ${
           toastType === 'error'
-            ? 'bg-danger/20 border border-danger/40 text-red-300'
-            : 'bg-success/20 border border-success/40 text-green-300'
+            ? 'bg-danger/20 border border-danger/40 text-danger'
+            : 'bg-success/20 border border-success/40 text-success'
         }`}>
           <span>{toastMessage}</span>
-          <button onClick={() => setToastMessage(null)} className="text-gray-400 hover:text-white"><X className="w-4 h-4" /></button>
+          <button onClick={() => setToastMessage(null)} className="text-slate-600 hover:text-slate-900"><X className="w-4 h-4" /></button>
         </div>
       )}
 
@@ -171,7 +175,7 @@ export default function TimetablePage() {
         {canGenerate && (
           <button
             onClick={() => setIsGeneratorModalOpen(true)}
-            className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-gradient-brand text-white text-xs font-bold shadow-glow hover:opacity-90 transition-all"
+            className="btn-primary"
           >
             <Sparkles className="w-4 h-4" /> Run AI Generator
           </button>
@@ -183,10 +187,12 @@ export default function TimetablePage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
           {/* Department */}
           <div className="relative">
-            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Building2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <select
               className={toolbarSelectClass}
               value={selectedDept?.id ?? ''}
+              disabled={isHod}
+              title={isHod ? 'You can only view and generate timetables for your own department' : undefined}
               onChange={(e) => {
                 setSelectedDeptId(Number(e.target.value) || null)
                 setSelectedYearId(null)
@@ -197,12 +203,12 @@ export default function TimetablePage() {
                 <option key={d.id} value={d.id}>{d.name}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           </div>
 
           {/* Year */}
           <div className="relative">
-            <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Layers className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <select
               className={toolbarSelectClass}
               value={selectedYear?.id ?? ''}
@@ -215,12 +221,12 @@ export default function TimetablePage() {
                 <option key={y.id} value={y.id}>{y.yearLabel}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           </div>
 
           {/* Section */}
           <div className="relative">
-            <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <BookOpen className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <select
               className={toolbarSelectClass}
               value={activeSection?.id ?? ''}
@@ -230,12 +236,12 @@ export default function TimetablePage() {
                 <option key={s.id} value={s.id}>Section {s.name}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           </div>
 
           {/* Semester */}
           <div className="relative">
-            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Calendar className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
             <select
               className={toolbarSelectClass}
               value={selectedSemester}
@@ -245,7 +251,7 @@ export default function TimetablePage() {
                 <option key={s} value={s}>Semester {s}</option>
               ))}
             </select>
-            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500 pointer-events-none" />
+            <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500 pointer-events-none" />
           </div>
         </div>
       </div>
@@ -253,56 +259,65 @@ export default function TimetablePage() {
       {/* ── Timetable Display ── */}
       {isLoading ? (
         <div className="flex items-center justify-center py-24">
-          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
       ) : timetable && timetable.entries?.length > 0 ? (
         <div className="card overflow-x-auto p-4">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="border-b border-white/10">
-                <th className="px-2 py-1.5 text-[11px] font-bold text-gray-400 uppercase w-24">Day / Slot</th>
+              <tr className="border-b border-line">
+                <th className="px-2 py-1.5 text-[11px] font-bold text-slate-600 uppercase w-24">Day / Slot</th>
                 {columns.map((col) => (
-                  <th key={col.key} className="px-2 py-1.5 text-[11px] font-bold text-gray-300 text-center min-w-[140px]">
+                  <th key={col.key} className="px-2 py-1.5 text-[11px] font-bold text-slate-700 text-center min-w-[140px]">
                     {col.label}
                   </th>
                 ))}
               </tr>
             </thead>
-            <tbody className="divide-y divide-white/5">
+            {/* Was `divide-y divide-white/5` — a 5%-white rule left over from a
+                dark theme, invisible on the near-white card. Row separation is
+                already carried by each cell's own border. */}
+            <tbody>
               {DAYS.map((day) => (
-                <tr key={day} className="hover:bg-white/[0.02]">
-                  <td className="px-2 py-1.5 text-[11px] font-bold text-brand-300 uppercase tracking-wider bg-surface-100/50">
+                <tr key={day} className="hover:bg-slate-50">
+                  <td className="px-2 py-1.5 text-[11px] font-bold text-accent-700 uppercase tracking-wider bg-slate-50">
                     {day}
                   </td>
                   {columns.map((col) => {
                     const entry = entryMap.get(`${day}_${col.key}`)
                     if (!entry) {
                       return (
-                        <td key={col.key} className="p-1.5 text-center text-[11px] border border-white/5">
-                          <span className="text-gray-600 italic">Free Period</span>
+                        <td key={col.key} className="p-1.5 text-center text-[11px] border border-line">
+                          <span className="text-slate-500 italic">Free Period</span>
                         </td>
                       )
                     }
                     const isLab = entry.isLab
                     return (
-                      <td key={col.key} className="p-1 border border-white/5">
-                        <div className={`px-2 py-1.5 rounded-md space-y-0.5 ${
+                      <td key={col.key} className="p-1 border border-line">
+                        {/* LAB vs THEORY was bg-brand-600/15 vs bg-brand-500/15 —
+                            two almost identical blues at 15% opacity, so the
+                            distinction the cell was meant to carry was invisible.
+                            It now mirrors the text badge below it (LAB = accent,
+                            THEORY = neutral) instead of contradicting it, which
+                            also keeps magenta off the ~36 THEORY cells. */}
+                        <div className={`px-2 py-1.5 rounded-sm space-y-0.5 ${
                           isLab
-                            ? 'bg-purple-500/15 border border-purple-500/30'
-                            : 'bg-brand-500/15 border border-brand-500/30'
+                            ? 'bg-accent-50 border border-accent-200'
+                            : 'bg-slate-50 border border-line'
                         }`}>
                           <div className="flex items-center gap-1">
-                            <span className="font-bold text-[11px] text-white">{entry.subjectCode}</span>
-                            <span className={`text-[9px] px-1 py-px rounded font-semibold ${isLab ? 'bg-purple-500/30 text-purple-200' : 'bg-brand-500/30 text-brand-200'}`}>
+                            <span className="font-bold text-[11px] text-slate-900">{entry.subjectCode}</span>
+                            <span className={`text-[9px] px-1 py-px rounded font-semibold ${isLab ? 'bg-accent-50 text-accent-700' : 'bg-slate-200 text-slate-700'}`}>
                               {isLab ? 'LAB' : 'THEORY'}
                             </span>
                           </div>
-                          <div className="text-[10px] font-medium text-gray-200 truncate">{entry.subjectName}</div>
-                          <div className="text-[9px] text-gray-400 flex items-center gap-1">
-                            <User className="w-2.5 h-2.5 text-brand-400" /> {entry.facultyName}
+                          <div className="text-[10px] font-medium text-slate-700 truncate">{entry.subjectName}</div>
+                          <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                            <User className="w-2.5 h-2.5 text-slate-500" /> {entry.facultyName}
                           </div>
-                          <div className="text-[9px] text-gray-400 flex items-center gap-1">
-                            <Building2 className="w-2.5 h-2.5 text-emerald-400" /> {entry.roomName || `Room ${entry.roomNumber}`}
+                          <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                            <Building2 className="w-2.5 h-2.5 text-green-600" /> {entry.roomName || `Room ${entry.roomNumber}`}
                           </div>
                         </div>
                       </td>
@@ -314,20 +329,22 @@ export default function TimetablePage() {
           </table>
         </div>
       ) : (
-        <div className="card py-20 text-center space-y-4">
-          <Calendar className="w-16 h-16 text-brand-500/30 mx-auto" />
-          <h3 className="text-lg font-bold text-white">No timetable available for this selection.</h3>
-          <p className="text-xs text-gray-400 max-w-sm mx-auto">
-            No timetable has been generated for the selected Department / Year / Section / Semester combination.
-          </p>
-          {canGenerate && (
-            <button
-              onClick={() => setIsGeneratorModalOpen(true)}
-              className="inline-flex items-center gap-2 h-10 px-4 rounded-xl bg-gradient-brand text-white text-xs font-bold shadow-glow hover:opacity-90 transition-all"
-            >
-              <Sparkles className="w-4 h-4" /> Run AI Generator
-            </button>
-          )}
+        <div className="card">
+          <div className="empty-state py-24">
+            <Calendar className="w-16 h-16 text-accent-500/25" />
+            <h3 className="empty-state-title">No timetable available for this selection.</h3>
+            <p className="empty-state-desc">
+              No timetable has been generated for the selected Department / Year / Section / Semester combination.
+            </p>
+            {canGenerate && (
+              <button
+                onClick={() => setIsGeneratorModalOpen(true)}
+                className="btn-primary mt-4"
+              >
+                <Sparkles className="w-4 h-4" /> Run AI Generator
+              </button>
+            )}
+          </div>
         </div>
       )}
 
@@ -335,34 +352,27 @@ export default function TimetablePage() {
       {timetable && timetable.entries?.length > 0 && (
         <div className="flex flex-col items-end gap-2">
           <div className="flex items-center gap-3">
-            <div className="px-3.5 py-1.5 rounded-xl bg-white/5 border border-white/10 text-gray-300 text-xs font-bold flex items-center gap-1.5">
-              <Calendar className="w-3.5 h-3.5 text-brand-400" /> {scheduledCount} / {availableSlots} Slots Scheduled
-            </div>
-            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-bold flex items-center gap-1.5">
-              <CheckCircle className="w-3.5 h-3.5" /> Optimization Score: {timetable.optimizationScore || 100}%
+            <div className="px-3.5 py-1.5 rounded-sm bg-slate-50 border border-line text-slate-700 text-xs font-bold flex items-center gap-1.5">
+              <Calendar className="w-3.5 h-3.5 text-accent-600" /> {scheduledCount} / {availableSlots} Slots Scheduled
             </div>
 
-            {timetable.conflictCount > 0 ? (
+            {timetable.conflictCount > 0 && (
               <button
                 onClick={() => setShowConflictsModal(true)}
-                className="px-3.5 py-1.5 rounded-xl bg-danger/15 border border-danger/30 text-red-400 text-xs font-bold flex items-center gap-1.5 hover:bg-danger/25 transition-all"
+                className="px-3.5 py-1.5 rounded-sm bg-danger/15 border border-danger/30 text-danger text-xs font-bold flex items-center gap-1.5 hover:bg-danger/25 transition-all"
               >
                 <AlertTriangle className="w-4 h-4 animate-bounce" /> {timetable.conflictCount} Conflicts Detected
               </button>
-            ) : (
-              <div className="px-3.5 py-1.5 rounded-xl bg-success/15 border border-success/30 text-success text-xs font-bold flex items-center gap-1.5">
-                <CheckCircle className="w-4 h-4" /> 0 Conflicts (Clean)
-              </div>
             )}
           </div>
-          <div className="text-[11px] text-gray-500">
+          <div className="text-[11px] text-slate-500">
             {timetable.departmentName} · {selectedYear?.yearLabel || ''} Sec {timetable.sectionName} · Semester {timetable.semester} · {timetable.academicSession}
           </div>
         </div>
       )}
 
       {deptError && (
-        <p className="w-full text-xs text-red-400">
+        <p className="w-full text-xs text-danger">
           Could not load departments from the server. Please refresh the page or verify the backend is running.
         </p>
       )}
@@ -371,39 +381,39 @@ export default function TimetablePage() {
       {showConflictsModal && timetable && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowConflictsModal(false)} />
-          <div className="relative w-full max-w-lg rounded-2xl bg-surface-800 border border-white/10 shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="relative w-full max-w-lg rounded-sm bg-surface border border-line shadow-card-lg">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-danger/15 border border-danger/30 flex items-center justify-center">
-                  <AlertTriangle className="w-5 h-5 text-red-400" />
+                <div className="w-9 h-9 rounded-sm bg-danger/15 border border-danger/30 flex items-center justify-center">
+                  <AlertTriangle className="w-5 h-5 text-danger" />
                 </div>
                 <div>
-                  <h3 className="text-white font-bold">Conflicts Detected</h3>
-                  <p className="text-[11px] text-gray-400">{timetable.conflictCount} issues on this timetable</p>
+                  <h3 className="text-slate-900 font-bold">Conflicts Detected</h3>
+                  <p className="text-[11px] text-slate-600">{timetable.conflictCount} issues on this timetable</p>
                 </div>
               </div>
-              <button onClick={() => setShowConflictsModal(false)} className="w-8 h-8 rounded-lg hover:bg-white/5 flex items-center justify-center text-gray-400 hover:text-white">
+              <button onClick={() => setShowConflictsModal(false)} className="w-8 h-8 rounded-sm hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900">
                 <X className="w-4 h-4" />
               </button>
             </div>
-            <div className="px-6 py-5 max-h-[55vh] overflow-y-auto space-y-3">
+            <div className="px-4 py-3 max-h-[55vh] overflow-y-auto space-y-3">
               {timetable.conflicts && timetable.conflicts.length > 0 ? (
                 timetable.conflicts.map((c) => (
-                  <div key={c.id} className="rounded-xl border border-danger/20 bg-danger/5 p-3 space-y-1">
-                    <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">
+                  <div key={c.id} className="rounded-sm border border-danger/20 bg-danger/5 p-3 space-y-1">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-danger">
                       {c.conflictType} · {c.severity}
                     </p>
-                    <p className="text-xs text-gray-300">{c.description}</p>
+                    <p className="text-xs text-slate-700">{c.description}</p>
                   </div>
                 ))
               ) : (
-                <p className="text-xs text-gray-400">No conflict details available.</p>
+                <p className="text-xs text-slate-600">No conflict details available.</p>
               )}
             </div>
-            <div className="px-6 py-4 border-t border-white/10 flex justify-end">
+            <div className="px-4 py-3 border-t border-line flex justify-end">
               <button
                 onClick={() => setShowConflictsModal(false)}
-                className="h-9 px-5 rounded-xl border border-white/10 text-xs font-bold text-gray-300 hover:bg-white/5 transition-all"
+                className="btn-secondary"
               >
                 Close
               </button>
@@ -416,41 +426,41 @@ export default function TimetablePage() {
       {isGeneratorModalOpen && canGenerate && selectedDept && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
           <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setIsGeneratorModalOpen(false)} />
-          <div className="relative w-full max-w-lg rounded-2xl bg-surface-800 border border-white/10 shadow-2xl">
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
+          <div className="relative w-full max-w-lg rounded-sm bg-surface border border-line shadow-card-lg">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-brand-500/30 to-purple-500/30 border border-brand-500/30 flex items-center justify-center">
-                  <Sparkles className="w-5 h-5 text-brand-400" />
+                <div className="w-10 h-10 rounded-sm bg-accent-50 border border-accent-200 flex items-center justify-center">
+                  <Sparkles className="w-5 h-5 text-accent-600" />
                 </div>
                 <div>
-                  <h3 className="text-white font-bold">Execute AI Generator</h3>
-                  <p className="text-[11px] text-gray-400">Generates a conflict-free timetable via heuristic engine</p>
+                  <h3 className="text-slate-900 font-bold">Execute AI Generator</h3>
+                  <p className="text-[11px] text-slate-600">Generates a conflict-free timetable via heuristic engine</p>
                 </div>
               </div>
-              <button onClick={() => setIsGeneratorModalOpen(false)} className="w-8 h-8 rounded-lg hover:bg-white/5 flex items-center justify-center text-gray-400 hover:text-white">
+              <button onClick={() => setIsGeneratorModalOpen(false)} className="w-8 h-8 rounded-sm hover:bg-slate-50 flex items-center justify-center text-slate-600 hover:text-slate-900">
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <div className="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-surface-100/50">
+            <div className="flex items-center justify-between px-4 py-3 border-b border-line bg-slate-50">
               <div className="space-y-2">
-                <p className="text-[10px] text-gray-500 tracking-widest uppercase font-semibold">Target Department</p>
-                <p className="text-sm font-bold text-white">{selectedDept.name}</p>
+                <p className="text-[10px] text-slate-500 tracking-widest uppercase font-semibold">Target Department</p>
+                <p className="text-sm font-bold text-slate-900">{selectedDept.name}</p>
               </div>
               <div className="text-right space-y-2">
-                <p className="text-[10px] text-gray-500 tracking-widest uppercase font-semibold">Target Section</p>
-                <p className="text-sm font-bold text-white">Section {activeSection?.name || '—'}</p>
+                <p className="text-[10px] text-slate-500 tracking-widest uppercase font-semibold">Target Section</p>
+                <p className="text-sm font-bold text-slate-900">Section {activeSection?.name || '—'}</p>
               </div>
               <div className="text-right space-y-2">
-                <p className="text-[10px] text-gray-500 tracking-widest uppercase font-semibold">Semester</p>
-                <p className="text-sm font-bold text-white">Semester {selectedSemester}</p>
+                <p className="text-[10px] text-slate-500 tracking-widest uppercase font-semibold">Semester</p>
+                <p className="text-sm font-bold text-slate-900">Semester {selectedSemester}</p>
               </div>
             </div>
 
-            <div className="px-6 py-5 space-y-4">
-              <div className="rounded-xl border border-white/10 bg-surface-100/50 p-4 space-y-2">
-                <p className="text-xs font-bold text-white">The engine will schedule:</p>
-                <ul className="space-y-2 text-[12px] text-gray-400">
+            <div className="px-4 py-3 space-y-4">
+              <div className="rounded-sm border border-line bg-slate-50 p-4 space-y-2">
+                <p className="text-xs font-bold text-slate-900">The engine will schedule:</p>
+                <ul className="space-y-2 text-[12px] text-slate-600">
                   {[
                     'Lectures, tutorials and labs into valid weekly slots.',
                     'Teachers within their availability windows.',
@@ -458,7 +468,7 @@ export default function TimetablePage() {
                     'Minimizing conflicts while balancing workload.',
                   ].map((item) => (
                     <li key={item} className="flex items-start gap-2">
-                      <CheckCircle className="w-4 h-4 text-brand-500 mt-0.5 flex-shrink-0" />
+                      <CheckCircle className="w-4 h-4 text-accent-500 mt-0.5 flex-shrink-0" />
                       {item}
                     </li>
                   ))}
@@ -469,14 +479,14 @@ export default function TimetablePage() {
                 <button
                   onClick={() => setIsGeneratorModalOpen(false)}
                   disabled={generateMutation.isPending}
-                  className="h-10 flex-1 rounded-xl border border-white/10 text-sm font-bold text-gray-300 hover:bg-white/5 transition-all disabled:opacity-50"
+                  className="btn-secondary btn-lg flex-1"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleGenerate}
                   disabled={generateMutation.isPending}
-                  className="h-10 flex-1 rounded-xl bg-gradient-brand text-sm font-bold text-white flex items-center justify-center gap-2 hover:opacity-90 transition-all disabled:opacity-50"
+                  className="btn-primary btn-lg flex-1"
                 >
                   {generateMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
                   {generateMutation.isPending ? 'Generating...' : 'Run Generator Engine'}

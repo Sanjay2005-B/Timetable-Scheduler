@@ -48,8 +48,8 @@ function Avatar({
   const photo = profile?.profilePhotoUrl
   const cls =
     size === 'large'
-      ? 'w-24 h-24 rounded-3xl text-3xl'
-      : 'w-14 h-14 rounded-2xl text-lg'
+      ? 'w-20 h-20 rounded-sm text-2xl'
+      : 'w-14 h-14 rounded-sm text-lg'
 
   if (photo) {
     return (
@@ -57,7 +57,7 @@ function Avatar({
         <img
           src={photo.startsWith('http') ? photo : `${API_BASE_URL}${photo}`}
           alt={profile?.fullName ?? 'Profile'}
-          className={`${cls} object-cover bg-surface-100 border border-white/10 shadow-glow`}
+          className={`${cls} object-cover bg-white border border-line `}
           onError={(e) => {
             ;(e.target as HTMLImageElement).style.display = 'none'
           }}
@@ -68,7 +68,7 @@ function Avatar({
             onClick={onUploadClick}
             title="Upload photo"
             disabled={uploading}
-            className="absolute inset-0 flex items-center justify-center rounded-3xl bg-black/40 opacity-0 hover:opacity-100 transition-opacity disabled:opacity-60"
+            className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/50 opacity-0 hover:opacity-100 transition-opacity disabled:opacity-60"
           >
             {uploading ? (
               <Loader2 className="w-6 h-6 text-white animate-spin" />
@@ -83,7 +83,7 @@ function Avatar({
   return (
     <div className="relative flex-shrink-0">
       <div
-        className={`${cls} bg-gradient-brand flex items-center justify-center font-bold text-white shadow-glow`}
+        className={`${cls} bg-accent-600 flex items-center justify-center font-bold text-white `}
       >
         {initial}
       </div>
@@ -93,7 +93,7 @@ function Avatar({
           onClick={onUploadClick}
           title="Upload photo"
           disabled={uploading}
-          className="absolute inset-0 flex items-center justify-center rounded-3xl bg-black/40 opacity-0 hover:opacity-100 transition-opacity disabled:opacity-60"
+          className="absolute inset-0 flex items-center justify-center rounded-sm bg-black/50 opacity-0 hover:opacity-100 transition-opacity disabled:opacity-60"
         >
           {uploading ? (
             <Loader2 className="w-6 h-6 text-white animate-spin" />
@@ -109,9 +109,9 @@ function Avatar({
 /** Small "key → value" row for read-only cards. */
 function InfoRow({ label, value, mono }: { label: string; value: React.ReactNode; mono?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-white/5 last:border-0">
-      <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">{label}</span>
-      <span className={`text-sm text-gray-100 font-medium text-right ${mono ? 'font-mono' : ''}`}>
+    <div className="flex items-center justify-between gap-4 py-2.5 border-b border-line last:border-0">
+      <span className="text-xs text-slate-500 font-medium uppercase tracking-wide">{label}</span>
+      <span className={`text-sm text-slate-800 font-medium text-right ${mono ? 'font-mono' : ''}`}>
         {value ?? '—'}
       </span>
     </div>
@@ -323,8 +323,8 @@ export default function ProfilePage() {
   if (isLoading) {
     return (
       <div className="flex flex-col items-center justify-center py-32 space-y-4">
-        <Loader2 className="w-10 h-10 text-brand-500 animate-spin" />
-        <p className="text-sm text-gray-400 font-medium">Loading your profile…</p>
+        <Loader2 className="w-10 h-10 text-accent-500 animate-spin" />
+        <p className="text-sm text-slate-600 font-medium">Loading your profile…</p>
       </div>
     )
   }
@@ -346,7 +346,7 @@ export default function ProfilePage() {
   const instAddress = profile.institutionAddress
 
   return (
-    <div className="space-y-6 max-w-5xl">
+    <div className="space-y-5 max-w-5xl">
       {/* ── Header ── */}
       <div className="page-header">
         <div>
@@ -361,7 +361,7 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Hero / identity card ── */}
-      <div className="card p-6 flex flex-col sm:flex-row items-center sm:items-start gap-6">
+      <div className="card p-4 flex flex-col sm:flex-row items-center sm:items-start gap-4">
         <Avatar
           profile={profile}
           uploading={uploadPhoto.isPending}
@@ -375,15 +375,15 @@ export default function ProfilePage() {
           className="hidden"
         />
         <div className="flex-1 min-w-0 text-center sm:text-left">
-          <h2 className="text-2xl font-bold text-white flex items-center justify-center sm:justify-start gap-2">
+          <h2 className="text-2xl font-bold text-slate-900 flex items-center justify-center sm:justify-start gap-2">
             {profile.fullName}
-            {profile.isActive && <BadgeCheck className="w-5 h-5 text-brand-400" />}
+            {profile.isActive && <BadgeCheck className="w-5 h-5 text-accent-600" />}
           </h2>
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-2 mt-2">
             <span className="badge badge-brand">{roleLabel(primaryRole)}</span>
-            {secondaryInfo && <span className="text-sm text-gray-400">{secondaryInfo}</span>}
+            {secondaryInfo && <span className="text-sm text-slate-600">{secondaryInfo}</span>}
           </div>
-          <p className="text-sm text-gray-500 mt-3 flex items-center justify-center sm:justify-start gap-1.5">
+          <p className="text-sm text-slate-500 mt-3 flex items-center justify-center sm:justify-start gap-1.5">
             <Mail className="w-4 h-4" /> {profile.email}
           </p>
         </div>
@@ -398,30 +398,30 @@ export default function ProfilePage() {
 
       {/* Saved / error notices */}
       {saved && (
-        <div className="p-4 rounded-xl bg-success/15 border border-success/30 text-success text-xs font-semibold animate-fade-in flex items-center gap-2">
+        <div className="p-4 rounded-sm bg-success/10 border border-success/30 text-success text-xs font-semibold animate-fade-in flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" /> Profile updated successfully!
         </div>
       )}
       {pwSaved && (
-        <div className="p-4 rounded-xl bg-success/15 border border-success/30 text-success text-xs font-semibold animate-fade-in flex items-center gap-2">
+        <div className="p-4 rounded-sm bg-success/10 border border-success/30 text-success text-xs font-semibold animate-fade-in flex items-center gap-2">
           <CheckCircle2 className="w-4 h-4" /> Password changed successfully!
         </div>
       )}
       {saveError && (
-        <div className="p-4 rounded-xl bg-danger/15 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
+        <div className="p-4 rounded-sm bg-danger/10 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> {saveError}
         </div>
       )}
       {photoError && (
-        <div className="p-4 rounded-xl bg-danger/15 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
+        <div className="p-4 rounded-sm bg-danger/10 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
           <AlertCircle className="w-4 h-4" /> {photoError}
         </div>
       )}
 
       {/* ── Personal Information ── */}
-      <div className="card p-6">
-        <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3 mb-4">
-          <User className="w-5 h-5 text-brand-400" /> Personal Information
+      <div className="card p-5">
+        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-line pb-3 mb-4">
+          <User className="w-5 h-5 text-accent-600" /> Personal Information
         </h3>
 
         {editing ? (
@@ -460,7 +460,7 @@ export default function ProfilePage() {
                 onChange={(e) => setForm({ ...form, profilePhotoUrl: e.target.value })}
                 placeholder="/uploads/photos/avatar.png"
               />
-              <p className="text-[11px] text-gray-600 mt-1.5">
+              <p className="text-[11px] text-slate-600 mt-1.5">
                 Click your avatar above to upload a photo (JPG / PNG / WebP, max 5 MB), or paste a direct file URL.
               </p>
             </div>
@@ -501,9 +501,9 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Account Information ── */}
-      <div className="card p-6">
-        <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3 mb-4">
-          <IdCard className="w-5 h-5 text-cyan-400" /> Account Information
+      <div className="card p-5">
+        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-line pb-3 mb-4">
+          <IdCard className="w-5 h-5 text-teal-600" /> Account Information
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10">
           <div>
@@ -522,20 +522,20 @@ export default function ProfilePage() {
               label="Employee ID"
               value={
                 <span className="flex items-center gap-1.5">
-                  <IdCard className="w-4 h-4 text-gray-500" />
-                  {profile.employeeId || <span className="italic text-gray-500">N/A</span>}
+                  <IdCard className="w-4 h-4 text-slate-500" />
+                  {profile.employeeId || <span className="italic text-slate-500">N/A</span>}
                 </span>
               }
             />
             <InfoRow
               label="Designation"
               value={
-                profile.designation || <span className="italic text-gray-500">N/A</span>
+                profile.designation || <span className="italic text-slate-500">N/A</span>
               }
             />
           </div>
         </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 mt-2 border-t border-white/5 pt-2">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-x-10 mt-2 border-t border-line pt-2">
           <InfoRow
             label="Account Status"
             value={
@@ -550,7 +550,7 @@ export default function ProfilePage() {
             label="Joined Date"
             value={
               <span className="flex items-center gap-1.5">
-                <CalendarDays className="w-4 h-4 text-gray-500" /> {formatDate(profile.joinedDate)}
+                <CalendarDays className="w-4 h-4 text-slate-500" /> {formatDate(profile.joinedDate)}
               </span>
             }
           />
@@ -558,9 +558,9 @@ export default function ProfilePage() {
       </div>
 
       {/* ── Security ── */}
-      <div className="card p-6">
-        <h3 className="text-base font-bold text-white flex items-center gap-2 border-b border-white/10 pb-3 mb-5">
-          <ShieldCheck className="w-5 h-5 text-emerald-400" /> Security
+      <div className="card p-5">
+        <h3 className="text-base font-bold text-slate-900 flex items-center gap-2 border-b border-line pb-3 mb-5">
+          <ShieldCheck className="w-5 h-5 text-green-600" /> Security
         </h3>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -595,7 +595,7 @@ export default function ProfilePage() {
         {!isFaculty && (
         <div className="mt-5">
           <div className="flex flex-wrap items-center justify-between gap-3 mb-2">
-            <p className="text-xs font-semibold uppercase tracking-widest text-gray-500 flex items-center gap-1.5">
+            <p className="text-xs font-semibold uppercase tracking-widest text-slate-500 flex items-center gap-1.5">
               <Monitor className="w-3.5 h-3.5" />
               Active Sessions{!sessionsLoading && sessions ? ` (${sessions.length})` : ''}
             </p>
@@ -619,14 +619,14 @@ export default function ProfilePage() {
           </div>
 
           {sessionsLoading ? (
-            <div className="flex items-center gap-2 py-3 text-sm text-gray-500">
+            <div className="flex items-center gap-2 py-3 text-sm text-slate-500">
               <Loader2 className="w-4 h-4 animate-spin" /> Loading sessions…
             </div>
           ) : sessions && sessions.length > 0 ? (
             <div className="overflow-x-auto">
               <table className="w-full text-left text-sm">
                 <thead>
-                  <tr className="text-[11px] uppercase tracking-wider text-gray-500 border-b border-white/10">
+                  <tr className="text-[11px] uppercase tracking-wider text-slate-500 border-b border-line">
                     <th className="py-2 pr-3 font-semibold">Device</th>
                     <th className="py-2 pr-3 font-semibold">IP Address</th>
                     <th className="py-2 pr-3 font-semibold">Signed In</th>
@@ -636,11 +636,11 @@ export default function ProfilePage() {
                 </thead>
                 <tbody>
                   {sessions.map((s) => (
-                    <tr key={s.sessionId} className="border-b border-white/5 last:border-0">
-                      <td className="py-2.5 pr-3 text-gray-200">{s.device || 'Unknown device'}</td>
-                      <td className="py-2.5 pr-3 text-gray-400 font-mono">{s.ipAddress || '—'}</td>
-                      <td className="py-2.5 pr-3 text-gray-400">{formatDate(s.createdAt)}</td>
-                      <td className="py-2.5 pr-3 text-gray-400">{formatDate(s.expiresAt)}</td>
+                    <tr key={s.sessionId} className="border-b border-line last:border-0">
+                      <td className="py-2.5 pr-3 text-slate-700">{s.device || 'Unknown device'}</td>
+                      <td className="py-2.5 pr-3 text-slate-600 font-mono">{s.ipAddress || '—'}</td>
+                      <td className="py-2.5 pr-3 text-slate-600">{formatDate(s.createdAt)}</td>
+                      <td className="py-2.5 pr-3 text-slate-600">{formatDate(s.expiresAt)}</td>
                       <td className="py-2.5 text-right">
                         <button
                           type="button"
@@ -657,24 +657,24 @@ export default function ProfilePage() {
               </table>
             </div>
           ) : (
-            <p className="py-3 text-sm text-gray-500">You have no active sessions.</p>
+            <p className="py-3 text-sm text-slate-500">You have no active sessions.</p>
           )}
 
           {sessionsError && (
-            <div className="mt-3 p-3 rounded-xl bg-danger/15 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
+            <div className="mt-3 p-3 rounded-sm bg-danger/10 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
               <AlertCircle className="w-4 h-4" /> {sessionsError}
             </div>
           )}
 
-          <p className="text-[11px] text-gray-600 mt-2">
+          <p className="text-[11px] text-slate-600 mt-2">
             Revoking a session signs that device out immediately — its refresh token stops working.
             "Logout from Other Devices" keeps this one signed in.
           </p>
         </div>
         )}
 
-        <div className="mt-5 p-4 rounded-xl bg-surface-100 border border-white/5 text-xs text-gray-500 space-y-1">
-          <p className="font-semibold text-gray-400 flex items-center gap-1.5">
+        <div className="mt-5 p-4 rounded-sm bg-slate-50 border border-line text-xs text-slate-500 space-y-1">
+          <p className="font-semibold text-slate-600 flex items-center gap-1.5">
             <UserRound className="w-3.5 h-3.5" /> Notifications
           </p>
           <p>• Change Password verifies your current password server-side — a wrong current password is rejected.</p>
@@ -687,15 +687,15 @@ export default function ProfilePage() {
         <div className="modal-backdrop" onClick={() => setPwModalOpen(false)}>
           <div className="modal max-w-md" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-emerald-400" /> Change Password
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <KeyRound className="w-5 h-5 text-green-600" /> Change Password
               </h3>
               <button onClick={() => setPwModalOpen(false)} className="btn-icon">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handlePwSubmit} className="p-6 space-y-4">
+            <form onSubmit={handlePwSubmit} className="p-4 space-y-4">
               <div className="form-group">
                 <label htmlFor="currentPassword" className="label">Current Password *</label>
                 <input
@@ -736,7 +736,7 @@ export default function ProfilePage() {
               </div>
 
               {pwError && (
-                <div className="p-3 rounded-xl bg-danger/15 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
+                <div className="p-3 rounded-sm bg-danger/10 border border-danger/30 text-danger text-xs font-semibold animate-fade-in flex items-center gap-2">
                   <AlertCircle className="w-4 h-4" /> {pwError}
                 </div>
               )}

@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { DoorOpen, Plus, Search, Trash2, Edit2, Loader2, X, Building2, Users, GraduationCap } from 'lucide-react'
+import { DoorOpen, Plus, Trash2, Edit2, Loader2, X, Building2, Users, GraduationCap } from 'lucide-react'
 import { classroomApi, ClassroomRequest, ClassroomResponse } from '@/api/classroomApi'
 import { departmentApi, DepartmentResponse, AcademicYearDto } from '@/api/departmentApi'
+import SearchInput from '@/components/ui/SearchInput'
+import { useHodScope } from '@/hooks/useHodScope'
 
 export default function ClassroomsPage() {
   const queryClient = useQueryClient()
+  // An HOD's classroom list and every ownership target are confined to their
+  // own department by the backend; the form is pinned to match.
+  const { isHod, departmentId } = useHodScope()
   const [search, setSearch] = useState('')
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -76,7 +81,7 @@ export default function ClassroomsPage() {
       roomNumber: `CS-${Math.floor(Math.random() * 900) + 100}`,
       roomName: '',
       building: 'Block A',
-      departmentId: deptData && deptData.length > 0 ? deptData[0].id : undefined,
+      departmentId: isHod ? departmentId ?? undefined : deptData && deptData.length > 0 ? deptData[0].id : undefined,
       academicYearId: undefined,
       sectionId: undefined,
       roomType: 'LECTURE_HALL',
@@ -121,7 +126,7 @@ export default function ClassroomsPage() {
   const classrooms = data?.content || []
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="page-header">
         <div>
           <h1 className="page-title">Classroom Management</h1>
@@ -133,19 +138,15 @@ export default function ClassroomsPage() {
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by room number, building, room name…"
-            className="input pl-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          className="flex-1 max-w-md"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by room number, building, room name…"
+        />
 
         <select
-          className="input w-auto min-w-[180px]"
+          className="input w-auto min-w-[180px] h-10"
           value={typeFilter}
           onChange={(e) => setTypeFilter(e.target.value)}
         >
@@ -159,70 +160,81 @@ export default function ClassroomsPage() {
 
       {isLoading ? (
         <div className="flex justify-center py-20">
-          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
       ) : classrooms.length === 0 ? (
-        <div className="card text-center py-20">
-          <DoorOpen className="w-16 h-16 text-emerald-500/30 mx-auto mb-4" />
-          <h3 className="empty-state-title">No Classrooms Found</h3>
-          <p className="empty-state-desc">Add your college's rooms to start timetable generation.</p>
+        <div className="card">
+          <div className="empty-state py-24">
+            <DoorOpen className="w-16 h-16 text-green-600/25 mb-4" />
+            <h3 className="empty-state-title">No Classrooms Found</h3>
+            <p className="empty-state-desc">Add your college's rooms to start timetable generation.</p>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {classrooms.map((r) => (
-            <div key={r.id} className="card p-5 hover:border-emerald-500/30 transition-all flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <span className="badge badge-brand text-[10px]">{r.building || 'Main'}</span>
-                    <h3 className="text-xl font-bold text-white mt-1">{r.roomNumber}</h3>
-                    <p className="text-xs text-gray-400">{r.roomName || 'Classroom'}</p>
-                  </div>
-                  <span className={`badge ${r.roomType === 'LAB' ? 'badge-info' : 'badge-gray'}`}>
-                    {r.roomType}
+            <div
+              key={r.id}
+              className="card p-4 h-full flex flex-col gap-3 hover:border-slate-300 hover:shadow-card transition-all"
+            >
+              {/* 1 — Building + room type */}
+              <div className="flex items-center justify-between gap-2">
+                {/* Building is a location, not a brand moment — neutral badge. */}
+                <span className="badge badge-gray text-[10px] truncate" title={r.building || undefined}>{r.building || 'Main'}</span>
+                <span className={`badge ${r.roomType === 'LAB' ? 'badge-info' : 'badge-gray'} whitespace-nowrap`}>
+                  {r.roomType}
+                </span>
+              </div>
+
+              {/* 2 — Room number + room name */}
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 leading-tight truncate" title={r.roomNumber}>{r.roomNumber}</h3>
+                <p className="text-[11px] text-slate-600 truncate" title={r.roomName || undefined}>{r.roomName || 'Classroom'}</p>
+              </div>
+
+              {/* 3 — Capacity · 4 — Floor · 5 — Department & year/section */}
+              <div className="grid grid-cols-2 gap-x-2 gap-y-1.5 text-[11px] bg-slate-50 border border-line px-2.5 py-2 rounded-sm">
+                <div className="min-w-0">
+                  <span className="text-slate-600 block">Capacity</span>
+                  <span className="font-bold text-slate-900 flex items-center gap-1">
+                    <Users className="w-3 h-3 text-green-600 flex-shrink-0" /> {r.capacity} seats
                   </span>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 my-4 text-xs bg-surface-100 p-3 rounded-xl">
-                  <div>
-                    <span className="text-gray-400 block">Capacity</span>
-                    <span className="font-bold text-white text-sm flex items-center gap-1">
-                      <Users className="w-3.5 h-3.5 text-emerald-400" /> {r.capacity} seats
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block">Floor</span>
-                    <span className="font-semibold text-white">Floor {r.floor || 1}</span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block">Department</span>
-                    <span className="font-semibold text-white flex items-center gap-1">
-                      <Building2 className="w-3.5 h-3.5 text-brand-400" />
-                      {r.departmentName || 'Shared'}
-                    </span>
-                  </div>
-                  <div>
-                    <span className="text-gray-400 block">Year / Section</span>
-                    <span className="font-semibold text-white flex items-center gap-1">
-                      <GraduationCap className="w-3.5 h-3.5 text-brand-400" />
+                <div className="min-w-0">
+                  <span className="text-slate-600 block">Floor</span>
+                  <span className="font-semibold text-slate-900">{r.floor || 1}</span>
+                </div>
+                <div className="min-w-0 col-span-2">
+                  <span className="text-slate-600 block">Department</span>
+                  <span className="font-semibold text-slate-900 flex items-center gap-1 min-w-0">
+                    <Building2 className="w-3 h-3 text-accent-600 flex-shrink-0" />
+                    <span className="truncate" title={r.departmentName || undefined}>{r.departmentName || 'Shared'}</span>
+                  </span>
+                </div>
+                <div className="min-w-0 col-span-2">
+                  <span className="text-slate-600 block">Year / Section</span>
+                  <span className="font-semibold text-slate-900 flex items-center gap-1 min-w-0">
+                    <GraduationCap className="w-3 h-3 text-accent-600 flex-shrink-0" />
+                    <span className="truncate">
                       {r.academicYearId
                         ? `${r.academicYearLabel || 'Year'}${r.sectionId ? ' · ' + (r.sectionName || '') : ''}`
                         : 'All'}
                     </span>
-                  </div>
+                  </span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-between pt-3 border-t border-white/5">
+              {/* 6 — Availability · 7 — Actions */}
+              <div className="mt-auto flex items-center justify-between gap-1 border-t border-line pt-2">
                 <span className={`badge ${r.status === 'AVAILABLE' ? 'badge-success' : 'badge-warning'}`}>
                   {r.status}
                 </span>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1">
                   <button onClick={() => openEditModal(r)} className="btn-ghost btn-sm">
-                    <Edit2 className="w-3.5 h-3.5 text-brand-400" /> Edit
+                    <Edit2 className="w-3.5 h-3.5 text-slate-500" /> Edit
                   </button>
                   <button onClick={() => deleteMutation.mutate(r.id)} className="btn-ghost btn-sm text-danger">
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5" /> Delete
                   </button>
                 </div>
               </div>
@@ -235,14 +247,14 @@ export default function ClassroomsPage() {
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <DoorOpen className="w-5 h-5 text-emerald-400" />
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <DoorOpen className="w-5 h-5 text-green-600" />
                 {editingRoom ? 'Edit Room' : 'Add Room'}
               </h3>
               <button onClick={closeModal} className="btn-icon"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="form-group">
                   <label className="label">Room Number *</label>
@@ -272,12 +284,18 @@ export default function ClassroomsPage() {
 
               <div>
                 <label className="label">Department Ownership</label>
-                <p className="text-xs text-gray-500 mb-2">Leave shared to let any department's timetable use this room.</p>
+                <p className="text-xs text-slate-500 mb-2">
+                  {isHod
+                    ? 'Rooms you manage belong to your own department.'
+                    : 'Leave shared to let any department\'s timetable use this room.'}
+                </p>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="form-group">
                     <select
                       className="input"
                       value={formData.departmentId ?? ''}
+                      disabled={isHod}
+                      title={isHod ? 'You can only manage classrooms in your own department' : undefined}
                       onChange={(e) => {
                         const departmentId = e.target.value === '' ? undefined : Number(e.target.value)
                         setFormData({ ...formData, departmentId, academicYearId: undefined, sectionId: undefined })

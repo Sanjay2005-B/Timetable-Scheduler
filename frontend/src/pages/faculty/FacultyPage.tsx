@@ -1,11 +1,16 @@
 import { useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { Users, Plus, Search, Trash2, Edit2, Loader2, X, Building2, Mail, Phone } from 'lucide-react'
+import { Users, Plus, Trash2, Edit2, Loader2, X, Building2, Mail, Phone } from 'lucide-react'
 import { facultyApi, FacultyRequest, FacultyResponse } from '@/api/facultyApi'
 import { departmentApi } from '@/api/departmentApi'
+import SearchInput from '@/components/ui/SearchInput'
+import { useHodScope } from '@/hooks/useHodScope'
 
 export default function FacultyPage() {
   const queryClient = useQueryClient()
+  // Faculty are confined to the HOD's own department: the backend scopes the
+  // list and rejects any other departmentId, so the form is pinned to match.
+  const { isHod, departmentId } = useHodScope()
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState<number | undefined>(undefined)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -79,7 +84,7 @@ export default function FacultyPage() {
       lastName: '',
       email: '',
       phone: '',
-      departmentId: deptData && deptData.length > 0 ? deptData[0].id : undefined,
+      departmentId: isHod ? departmentId ?? undefined : deptData && deptData.length > 0 ? deptData[0].id : undefined,
       designation: 'Professor',
       qualification: 'Ph.D.',
       specialization: '',
@@ -127,10 +132,22 @@ export default function FacultyPage() {
     return d?.message || 'Failed to save faculty member.'
   }
 
-  const facultyList = data?.content || []
+  // Displayed in ascending A–Z order by faculty name (case-insensitive).
+  // A copied array is sorted so the react-query response cache is never
+  // mutated; because the list is derived on every render the order stays
+  // correct for every search / department-filter result and re-sorts itself
+  // after a create or edit.
+  const facultyNameKey = (f: FacultyResponse) =>
+    (f.fullName || `${f.firstName || ''} ${f.lastName || ''}`.trim() || f.employeeId || '')
+      .trim()
+      .toLowerCase()
+
+  const facultyList = [...(data?.content || [])].sort((a, b) =>
+    facultyNameKey(a).localeCompare(facultyNameKey(b), undefined, { sensitivity: 'base' }),
+  )
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div className="page-header">
         <div>
           <h1 className="page-title">Faculty Management</h1>
@@ -143,19 +160,15 @@ export default function FacultyPage() {
 
       {/* Search & Dept Filter */}
       <div className="flex flex-wrap items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
-          <input
-            type="text"
-            placeholder="Search by name, employee ID, email…"
-            className="input pl-10"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-          />
-        </div>
+        <SearchInput
+          className="flex-1 max-w-md"
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by name, employee ID, email…"
+        />
 
         <select
-          className="input w-auto min-w-[200px]"
+          className="input w-auto min-w-[200px] h-10"
           value={deptFilter || ''}
           onChange={(e) => setDeptFilter(e.target.value ? Number(e.target.value) : undefined)}
         >
@@ -169,54 +182,65 @@ export default function FacultyPage() {
       {/* Grid Cards */}
       {isLoading ? (
         <div className="flex justify-center py-20">
-          <Loader2 className="w-8 h-8 text-brand-500 animate-spin" />
+          <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
       ) : facultyList.length === 0 ? (
-        <div className="card text-center py-20">
-          <Users className="w-16 h-16 text-gray-500/30 mx-auto mb-4" />
-          <h3 className="empty-state-title">No Faculty Members Found</h3>
-          <p className="empty-state-desc">Create your first faculty member to assign subjects and schedules.</p>
+        <div className="card">
+          <div className="empty-state py-24">
+            <Users className="w-16 h-16 text-accent-500/25 mb-4" />
+            <h3 className="empty-state-title">No Faculty Members Found</h3>
+            <p className="empty-state-desc">Create your first faculty member to assign subjects and schedules.</p>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {facultyList.map((f) => (
-            <div key={f.id} className="card p-5 hover:border-brand-500/30 transition-all flex flex-col justify-between">
-              <div>
-                <div className="flex items-start justify-between mb-3">
-                  <div>
-                    <span className="badge badge-brand text-[10px]">{f.employeeId}</span>
-                    <h3 className="text-base font-bold text-white mt-1">{f.fullName}</h3>
-                    <p className="text-xs text-brand-400 font-medium">{f.designation}</p>
-                  </div>
-                  <span className={`badge ${f.status === 'AVAILABLE' ? 'badge-success' : f.status === 'LEAVE' ? 'badge-danger' : 'badge-warning'}`}>
-                    {f.status}
-                  </span>
-                </div>
+            <div
+              key={f.id}
+              className="card p-4 h-full flex flex-col gap-3 hover:border-slate-300 hover:shadow-card transition-all"
+            >
+              {/* 1 — Faculty ID + availability status */}
+              <div className="flex items-center justify-between gap-2">
+                {/* Neutral badge: an identifier is metadata, not a brand moment —
+                    a magenta badge on every card drowned the accent. */}
+                <span className="badge badge-gray font-mono text-[10px]">{f.employeeId}</span>
+                <span className={`badge ${f.status === 'AVAILABLE' ? 'badge-success' : f.status === 'LEAVE' ? 'badge-danger' : 'badge-warning'}`}>
+                  {f.status}
+                </span>
+              </div>
 
-                <div className="space-y-1.5 text-xs text-gray-400 my-4 border-t border-b border-white/5 py-3">
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-3.5 h-3.5 text-gray-500" />
-                    <span className="truncate">{f.departmentName || 'Unassigned'}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Mail className="w-3.5 h-3.5 text-gray-500" />
-                    <span className="truncate">{f.email}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Phone className="w-3.5 h-3.5 text-gray-500" />
-                    <span>{f.phone || 'N/A'}</span>
-                  </div>
-                </div>
+              {/* 2 — Name · 3 — Designation */}
+              <div className="min-w-0">
+                <h3 className="text-sm font-bold text-slate-900 leading-tight truncate" title={f.fullName}>{f.fullName}</h3>
+                <p className="text-[11px] text-accent-600 font-medium truncate">{f.designation || '—'}</p>
+              </div>
 
-                <div className="flex items-center justify-between text-xs bg-surface-100 p-2.5 rounded-xl">
-                  <span className="text-gray-400">Max Workload:</span>
-                  <span className="font-semibold text-white">{f.maxDailyHours}h/day · {f.maxWeeklyHours}h/week</span>
+              {/* 4 — Department · 5 — Email & phone */}
+              <div className="space-y-0.5 text-[11px] text-slate-600 border-t border-line pt-2">
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Building2 className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                  <span className="truncate" title={f.departmentName || undefined}>{f.departmentName || 'Unassigned'}</span>
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Mail className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                  <span className="truncate" title={f.email}>{f.email}</span>
+                </div>
+                <div className="flex items-center gap-1.5 min-w-0">
+                  <Phone className="w-3 h-3 text-slate-500 flex-shrink-0" />
+                  <span className="truncate">{f.phone || 'N/A'}</span>
                 </div>
               </div>
 
-              <div className="flex items-center justify-end gap-2 mt-4 pt-3 border-t border-white/5">
+              {/* 6 — Maximum workload */}
+              <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-[11px] bg-slate-50 border border-line px-2.5 py-1.5 rounded-sm">
+                <span className="text-slate-600">Max Workload</span>
+                <span className="font-semibold text-slate-900 whitespace-nowrap">{f.maxDailyHours}h/day · {f.maxWeeklyHours}h/week</span>
+              </div>
+
+              {/* 7 — Actions */}
+              <div className="mt-auto flex items-center justify-end gap-1 border-t border-line pt-2">
                 <button onClick={() => openEditModal(f)} className="btn-ghost btn-sm">
-                  <Edit2 className="w-3.5 h-3.5 text-brand-400" /> Edit
+                  <Edit2 className="w-3.5 h-3.5 text-slate-500" /> Edit
                 </button>
                 <button onClick={() => deleteMutation.mutate(f.id)} className="btn-ghost btn-sm text-danger">
                   <Trash2 className="w-3.5 h-3.5" /> Delete
@@ -232,14 +256,14 @@ export default function FacultyPage() {
         <div className="modal-backdrop" onClick={closeModal}>
           <div className="modal max-w-lg" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h3 className="text-lg font-bold text-white flex items-center gap-2">
-                <Users className="w-5 h-5 text-brand-400" />
+              <h3 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Users className="w-5 h-5 text-accent-500" />
                 {editingFaculty ? 'Edit Faculty' : 'Add Faculty Member'}
               </h3>
               <button onClick={closeModal} className="btn-icon"><X className="w-5 h-5" /></button>
             </div>
 
-            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-6 space-y-4">
+            <form onSubmit={(e) => { e.preventDefault(); saveMutation.mutate(); }} className="p-4 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="form-group">
                   <label className="label">Employee ID *</label>
@@ -247,10 +271,21 @@ export default function FacultyPage() {
                 </div>
                 <div className="form-group">
                   <label className="label">Department</label>
-                  <select className="input" value={formData.departmentId || ''} onChange={(e) => setFormData({ ...formData, departmentId: e.target.value ? Number(e.target.value) : undefined })}>
+                  <select
+                    className="input"
+                    value={formData.departmentId || ''}
+                    disabled={isHod}
+                    title={isHod ? 'You can only manage faculty in your own department' : undefined}
+                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value ? Number(e.target.value) : undefined })}
+                  >
                     <option value="">Select Dept</option>
                     {deptData?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
                   </select>
+                  {isHod && (
+                    <p className="text-[11px] text-slate-500 mt-1">
+                      Fixed to your own department.
+                    </p>
+                  )}
                 </div>
               </div>
 
@@ -294,7 +329,7 @@ export default function FacultyPage() {
               {!editingFaculty && (
                 <div className="form-group">
                   <label className="label">Faculty Login Credentials</label>
-                  <p className="text-[11px] text-gray-500 mb-2">
+                  <p className="text-[11px] text-slate-500 mb-2">
                     A login account (ROLE_FACULTY) will be created and linked to this faculty record.
                   </p>
                   <div className="grid grid-cols-2 gap-4">

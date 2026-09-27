@@ -52,23 +52,21 @@ export default function ResetPasswordPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface flex">
+    <div className="min-h-screen bg-canvas flex">
       {/* LEFT SIDE */}
-      <div className="hidden lg:flex lg:w-1/2 bg-gradient-to-br from-brand-900 via-brand-800 to-surface relative overflow-hidden flex-col items-center justify-center p-12">
-        <div className="absolute top-0 left-0 w-72 h-72 bg-brand-500/20 rounded-full -translate-x-1/3 -translate-y-1/3 blur-3xl" />
-        <div className="absolute bottom-0 right-0 w-96 h-96 bg-accent-500/10 rounded-full translate-x-1/3 translate-y-1/3 blur-3xl" />
+      <div className="hidden lg:flex lg:w-1/2 bg-ink relative overflow-hidden flex-col items-center justify-center p-12">
 
         <div className="relative z-10 max-w-md text-center">
-          <div className="w-20 h-20 rounded-3xl bg-gradient-brand mx-auto mb-8 flex items-center justify-center shadow-glow-lg">
-            <Zap className="w-10 h-10 text-white" />
+          <div className="w-14 h-14 rounded-sm bg-ink mx-auto mb-6 flex items-center justify-center border border-white/15 ">
+            <Zap className="w-6 h-6 text-white" />
           </div>
           <h1 className="text-4xl font-bold text-white mb-4">
             Choose a New
             <br />
             Password
           </h1>
-          <p className="text-gray-400 text-lg leading-relaxed">
-            Your old password stops working the moment you reset it — every
+          <p className="text-slate-400 text-lg leading-relaxed">
+            Your old password stops working the moment you reset it â€” every
             logged-in device must sign in again with the new one.
           </p>
         </div>
@@ -78,37 +76,37 @@ export default function ResetPasswordPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md animate-slide-up">
           <div className="flex items-center gap-3 mb-8 lg:hidden">
-            <div className="w-10 h-10 rounded-xl bg-gradient-brand flex items-center justify-center shadow-glow">
-              <Zap className="w-5 h-5 text-white" />
+            <div className="w-9 h-9 rounded-sm bg-ink flex items-center justify-center border border-white/15 ">
+              <Zap className="w-4 h-4 text-white" />
             </div>
-            <p className="font-bold text-white">Timetable ERP</p>
+            <p className="font-bold text-slate-900">Timetable Scheduler</p>
           </div>
 
           {done ? (
             <div className="space-y-5 animate-slide-up">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 rounded-xl bg-success/15 border border-success/30 flex items-center justify-center flex-shrink-0">
-                  <CheckCircle2 className="w-5 h-5 text-success" />
+                <div className="w-6 h-6 rounded-sm bg-success/10 border border-success/30 flex items-center justify-center flex-shrink-0">
+                  <CheckCircle2 className="w-4 h-4 text-success" />
                 </div>
-                <h2 className="text-2xl font-bold text-white">Password Reset</h2>
+                <h2 className="text-2xl font-bold text-slate-900">Password Reset</h2>
               </div>
-              <p className="text-gray-400 text-sm leading-relaxed">
+              <p className="text-slate-600 text-sm leading-relaxed">
                 Your password has been changed successfully. Redirecting you to
-                the login page…
+                the login pageâ€¦
               </p>
             </div>
           ) : (
             <>
-              <h2 className="text-3xl font-bold text-white mb-2">
+              <h2 className="text-3xl font-bold text-slate-900 mb-2">
                 Reset Password
               </h2>
-              <p className="text-gray-400 mb-6">
+              <p className="text-slate-600 mb-4">
                 Enter the one-time token you received and choose a new password
                 (min 8 characters).
               </p>
 
               {error && (
-                <div className="flex items-center gap-3 p-4 rounded-xl bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
+                <div className="flex items-center gap-3 p-4 rounded-sm bg-danger/10 border border-danger/30 text-danger text-sm mb-5 animate-slide-up">
                   <AlertCircle className="w-4 h-4 flex-shrink-0" />
                   <span>{error}</span>
                 </div>
@@ -173,7 +171,7 @@ export default function ResetPasswordPage() {
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Resetting…
+                      Resettingâ€¦
                     </>
                   ) : (
                     <>
@@ -185,10 +183,10 @@ export default function ResetPasswordPage() {
             </>
           )}
 
-          <div className="mt-6 text-center border-t border-white/10 pt-5">
+          <div className="mt-4 text-center border-t border-line pt-5">
             <Link
               to="/forgot-password"
-              className="text-xs font-semibold text-gray-400 hover:text-gray-200 flex items-center justify-center gap-1.5"
+              className="text-xs font-semibold text-slate-600 hover:text-slate-700 flex items-center justify-center gap-1.5"
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Request a new token
             </Link>
