@@ -1,6 +1,7 @@
 package com.erp.timetable.module.timetable.engine.constraint;
 
 import com.erp.timetable.module.availability.entity.TimeSlot;
+import com.erp.timetable.module.subject.entity.Subject;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -28,11 +29,7 @@ public class LabConsecutiveBlockConstraint implements SchedulingConstraint {
             return true; // Not a practical lesson, constraint trivially satisfied
         }
 
-        // Part 2: greedy engine sends blocks of size practicalHours, so the
-        // constraint must accept that size (not the dropdown clamped [1,2]).
-        int blockSize = placement.getSubject() != null
-            ? placement.getSubject().getPracticalHours()
-            : practicalBlockSize;
+        int blockSize = resolvePracticalBlockSize(placement);
 
         List<TimeSlot> slots = placement.getSlots();
         if (slots == null || slots.isEmpty() || slots.size() > blockSize) {
@@ -54,11 +51,48 @@ public class LabConsecutiveBlockConstraint implements SchedulingConstraint {
         return true;
     }
 
+    /**
+     * The maximum number of consecutive periods a practical session of
+     * {@code placement}'s subject may occupy.
+     *
+     * <p>The bound is the subject's full weekly practical demand
+     * ({@code practicalHours}), because that is the one and only practical
+     * session length the Greedy engine builds: {@code schedulePracticalBlock}
+     * receives {@code int blockSize = practicalHours} and derives its candidate
+     * windows from {@code buildConsecutiveWindows(allSlots, blockSize)}, i.e. one
+     * continuous back-to-back block spanning all of the subject's practical
+     * hours. The configured {@code sessionBlockSize} is deliberately NOT used
+     * here — in the Greedy engine it is a THEORY-only control and the practical
+     * "Consecutive Periods per Session" setting is ignored by design, so allowing
+     * a longer session would loosen the bound without any producer to justify it.
+     *
+     * <p>The practical lesson is identified by {@link CandidatePlacement#isLab},
+     * which is deliberately decoupled from {@code subjectType} (CS142 and CS795
+     * are THEORY subjects that carry practical hours), so subject type is NOT
+     * consulted.
+     *
+     * <p>This is only an upper bound on session LENGTH. It does not relax any
+     * timetable-protection rule: a session may never span a break, its periods
+     * must be strictly consecutive, it occupies a single day, and room type,
+     * room capacity, room scope, section/faculty/room clash, the Saturday
+     * prohibition, faculty daily/weekly limits, department permission and
+     * tenant isolation are all evaluated by the other constraints in the
+     * Greedy engine's hard-constraint pipeline and by the service-layer
+     * RBAC/tenant guards. This class never selects a room, a day or a faculty
+     * member; it only length-checks an already-built candidate.
+     */
+    private int resolvePracticalBlockSize(CandidatePlacement placement) {
+        Subject subject = placement.getSubject();
+        if (subject == null) {
+            return Math.max(1, practicalBlockSize);
+        }
+        Integer practical = subject.getPracticalHours();
+        return (practical != null && practical >= 1) ? practical : Math.max(1, practicalBlockSize);
+    }
+
     @Override
     public String getViolationMessage(CandidatePlacement placement) {
-        int blockSize = placement.getSubject() != null
-            ? placement.getSubject().getPracticalHours()
-            : practicalBlockSize;
+        int blockSize = resolvePracticalBlockSize(placement);
         return "Practical lesson " + placement.getSubject().getSubjectCode() +
             " requires " + blockSize + " consecutive non-break periods in a single day";
     }

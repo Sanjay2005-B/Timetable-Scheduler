@@ -3,6 +3,82 @@
 Shared known-facts for anyone working in this repo. Update freely; keep entries
 short and factual.
 
+## Public college registration 403 on a shifted Vite port — FIXED 28-09-2026 (config-only)
+
+- SYMPTOM: College Admin self-registration returned **HTTP 403 with no useful
+  body**, but ONLY when the frontend happened to run on `5174`; the same
+  request on `5173` returned 201. Looked intermittent/random. Public endpoint,
+  no JWT involved.
+- ROOT CAUSE: Spring Security evaluates CORS **before** the controller and
+  answers an unlisted `Origin` with 403. `frontend/vite.config.ts` pins
+  `server.port: 5173` but Vite **silently falls through to 5174, 5175, ...**
+  when 5173 is already in use, and the allowlist was the literal
+  `http://localhost:3000,http://localhost:5173,http://localhost:8080`.
+  VERIFIED, not guessed: identical valid POST with `Origin: 5173` → 201,
+  `Origin: 5174` → 403, same body/jar/process.
+- EVERYTHING ELSE WAS ALREADY CORRECT — do not "fix" these again:
+  `authApi.registerCollege` already sends `{ skipAuth: true }` (stale JWT not
+  attached); `/auth/register-college` is in `SecurityConfig.PUBLIC_ENDPOINTS`
+  and `permitAll`; CSRF is disabled; `JwtAuthenticationFilter.shouldNotFilter`
+  skips `/auth/register-college`; Vite proxies `/api` → `:8080` with no
+  rewrite, so the browser path `/api/v1/auth/register-college` is correct and
+  must NOT become `/api/api/v1/...`.
+- FIX (one value, `backend/src/main/resources/application-h2.yml` under
+  `app.cors.allowed-origins`, H2 profile ONLY):
+  `http://localhost:3000,http://localhost:[*],http://127.0.0.1:[*],http://localhost:8080`.
+  `http://localhost:[*]` is Spring's `allowedOriginPatterns` **port wildcard**,
+  so the dev port can keep shifting. Still localhost-only, and a foreign origin
+  is still refused — the new test asserts both. Production still pins exact
+  origins via the `CORS_ALLOWED_ORIGINS` env var in `application.yml`.
+- NEW TEST `module/auth/CorsDevOriginRegistrationE2ETest` (7, green): boots the
+  REAL `h2` profile (`@ActiveProfiles("h2")` + `@SpringBootTest(properties =
+  spring.datasource.url=jdbc:h2:mem:cors_dev_origin_e2e;...)`) so it pins the
+  actual configured value instead of a value hardcoded in the test — that hard
+  coding is what let the gap exist. Asserts 201 from 5173/5174/5175/5273/3000
+  and 127.0.0.1, preflight echoes the origin, foreign origin still 403, the 6
+  protected endpoints still 401 anonymous, validation still 400/422.
+  **A/B PROVEN**: reverting the one config value fails 6/7 with exactly
+  `expected:<201> but was:<403>` — it is a real guard, not a tautology.
+- GREEN: 7 + AuthFlow 18 + CollegeRegistration 5 + RoleBasedAccess 11 +
+  MultiCollege 7 + FacultyRole 9 + PasswordReset 8 + ProfileApi 10 +
+  InstitutionApi 8 + PhotoUpload 9 = **106/106**. ZERO scheduling/engine edits.
+- DB NOTE: live 201-verify writes to the persistent H2. Seven throwaway probe
+  colleges (+ admin users) `CORSPRB2, CORSFINAL, FIXA001, FIXB001, FIXC001,
+  E2EFIN01, FINCHK01` now live in the dev DB; the user chose to KEEP them
+  (28-09-2026) — do not delete them, and do not re-create them. Prefer the
+  isolated in-memory DB for verification from now on.
+
+### Tooling gotchas learned here (cost real time — reuse these)
+
+- **PowerShell 5.1 mangles inline JSON on native exes.** `--data-raw '{"a":1}'`
+  loses its quotes and Spring answers
+  `HttpMessageNotReadableException: Unexpected character ('n' (code 110))`
+  → **HTTP 500**, which looks like an app bug. Always write the payload with
+  `[System.IO.File]::WriteAllText($p, $json)` and pass `--data-binary "@$p"`.
+- **A `500` in a batch of requests can belong to an EARLIER request.** One
+  bad-quoting request poisoned a whole run and made a *later* valid check look
+  like it returned 500. Re-test any surprising status in isolation before
+  believing it. (`Invoke-WebRequest` in `-NonInteractive` mode also needs
+  `-UseBasicParsing`, and in PS 5.1 its catch-block status is often `$null` —
+  prefer `curl.exe -s -o NUL -w "%{http_code}"`.)
+- **`Curl` is a built-in PowerShell alias for `Invoke-WebRequest`** — a helper
+  function named `Curl` blows up with
+  `Cannot convert 'System.Object[]' to the type 'System.Uri'`. Always call
+  `curl.exe` explicitly.
+- **The tool kills its process tree when a command finishes**, so a backend
+  started with `cmd /c start ... java -jar` dies moments later (log ends with
+  `^C`) and later requests return HTTP 000. Start the backend detached via WMI
+  so it survives across commands:
+  `Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='cmd.exe /c cd /d "<backend>" && "<jdk>\bin\java.exe" -jar target\timetable-scheduler-1.0.0.jar --spring.profiles.active=h2 > "<backend>\backend_start.log" 2>&1'}`
+  (boot is slow — poll the 8080 listener for ~60–90 s before testing).
+- Stop the backend before any `mvn test` that might touch the persistent H2
+  (it holds `timetabledb.mv.db`); `mvn clean` also fails while it is running.
+- Generic diagnostic order for a frontend-only-looking failure on this app:
+  **CORS 403 → `app.cors.allowed-origins` + the browser's actual `Origin` →
+  then auth/RBAC → then data.** An unauthenticated 403 here is CORS, not
+  Spring Security authorization. A browser top-level `GET` is NOT a valid CORS
+  probe (no `Origin` header); use `POST` with an explicit `-H "Origin: ..."`.
+
 ## FOLLOW-UP TASK (not a regression): timetable-entry LOCK ICON is never rendered (logged 26-09-2026)
 
 - GAP: the backend fully supports locking a timetable entry, but **no frontend

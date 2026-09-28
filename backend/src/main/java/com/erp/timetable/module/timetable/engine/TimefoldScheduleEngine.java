@@ -317,10 +317,21 @@ public class TimefoldScheduleEngine implements ScheduleEngine {
             }
 
             // Practical demand is grouped into Greedy-equivalent sessions:
-            // Part 2: lab always uses full practicalHours as one block (ignore dropdown).
+            // Part 2: lab uses the subject's per-subject sessionBlockSize (1/2/3),
+            // falling back to the global practical-block-size when null.
             if (practical > 0) {
                 long sessionSeq = 1L;
-                int blockSize = subject.getPracticalHours();
+                // The PRACTICAL block size must come from getPracticalBlockSize, which
+                // honours the subject's configured sessionBlockSize (1/2/3) and only
+                // falls back to the global practical-block-size when it is null.
+                // getSessionBlockSize is the THEORY accessor and forces 1 for every
+                // LAB subject, so calling it here collapsed a configured
+                // sessionBlockSize=3 lab into three INDEPENDENT size-1 sessions: the
+                // labConsecutiveBlock hard rule then validated each one-period session
+                // on its own, so nothing tied the three periods together and the
+                // solver could scatter them across three separate days (score
+                // 0hard, result [1,1,1]) instead of one consecutive 3-period block.
+                int blockSize = subjectDemandService.getPracticalBlockSize(subject);
                 int blockSessions = practical / blockSize;
                 int remainder = practical % blockSize;
                 long subjectIdKey = subject.getId() != null ? subject.getId() : -1L;
@@ -397,6 +408,29 @@ public class TimefoldScheduleEngine implements ScheduleEngine {
         // within the lab and theory groups. Locked lessons are pinned by
         // @PlanningPin and are unaffected by ordering.
         lessons.sort(Comparator.comparing(PlanningLesson::isLab).reversed());
+
+        // ── 7e. Room-availability-aware time-slot range order ────────────────
+        // FIRST_FIT takes the FIRST value of the time-slot range that satisfies
+        // the hard constraints, so the range order decides where the seed lands.
+        // With a room-poor day early in the range the heuristic deterministically
+        // fills that day to its hard room limit and spills the rest onto the next
+        // day, producing a day count the soft distribution penalty can never undo:
+        // consolidating later needs a multi-move climb out of that basin, and the
+        // local search does not find it (verified: 13x the search budget produced
+        // a byte-identical solution). Ordering the range by DESCENDING free
+        // eligible room cells makes the seed fill the room-rich days first, which
+        // is the same "the real per-day capacity is min(freeSlots, freeRoomCells)"
+        // rule the Greedy engine's day capacity now uses. Pure value ORDERING: the
+        // value set is unchanged, so no placement is removed and no hard
+        // constraint (room clash/capacity/type/scope, faculty, section, tenant)
+        // is relaxed — the local search may still move any lesson anywhere. Days
+        // that tie keep their original order, so a timetable whose rooms cover
+        // every day equally is completely unaffected.
+        orderTimeSlotsByRoomAvailability(plannableTimeSlots, plannableRooms, occupancyFacts,
+            requiredCapacity(timetable),
+            timetable.getSection() != null ? timetable.getSection().getId() : null,
+            timetable.getSection() != null && timetable.getSection().getAcademicYear() != null
+                ? timetable.getSection().getAcademicYear().getId() : null);
 
         SchedulingSolution problem = planningMapper.toSolutionFromLessons(
             timetable, availabilities, lessons, plannableRooms, plannableTimeSlots, occupancyFacts);
@@ -823,6 +857,92 @@ public class TimefoldScheduleEngine implements ScheduleEngine {
             return false;
         }
         return true;
+    }
+
+    /** Scope check against explicit ids (same rule as the lesson overload). */
+    private boolean roomScopeCompatible(PlannableRoom room, Long academicYearId, Long sectionId) {
+        if (room.getAcademicYearId() != null
+                && !room.getAcademicYearId().equals(academicYearId)) {
+            return false;
+        }
+        if (room.getSectionId() != null
+                && !room.getSectionId().equals(sectionId)) {
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * Reorders the {@code timeSlotRange} value range by DESCENDING count of the
+     * (slot x classroom) cells that could still host a THEORY period that day.
+     *
+     * <p>A cell counts only when a non-LAB, scope-compatible classroom that is
+     * not already occupied at that (day, slot) exists — exactly the eligibility
+     * the {@code ROOM_TYPE} / {@code ROOM_SCOPE_MATCH} / {@code ROOM_CAPACITY} /
+     * {@code ROOM_CLASH} hard constraints enforce at placement, including the
+     * theory-only capacity relaxation the other room logic uses. The comparison
+     * is stable, so days with equal cell counts keep the canonical
+     * WORKING_DAYS / slot order and nothing else changes.
+     *
+     * <p>This is a construction-heuristic seed aid only. It changes no
+     * constraint, removes no value from the range and cannot forbid a placement.
+     */
+    private void orderTimeSlotsByRoomAvailability(List<PlannableTimeSlot> slots,
+            List<PlannableRoom> rooms, List<OccupancyFact> occupancyFacts,
+            int requiredCapacity, Long sectionId, Long academicYearId) {
+
+        if (slots == null || slots.isEmpty() || rooms == null || rooms.isEmpty()) {
+            return;
+        }
+
+        // Rooms already claimed by another timetable's entry, per (day, slot).
+        Map<String, Set<Long>> occupiedRooms = new HashMap<>();
+        if (occupancyFacts != null) {
+            for (OccupancyFact f : occupancyFacts) {
+                if (f.getRoomId() == null || f.getDayOfWeek() == null || f.getTimeSlotId() == null) {
+                    continue;
+                }
+                occupiedRooms
+                    .computeIfAbsent(f.getDayOfWeek() + "_" + f.getTimeSlotId(), k -> new HashSet<>())
+                    .add(f.getRoomId());
+            }
+        }
+
+        Map<String, Integer> cellsByDay = new HashMap<>();
+        for (PlannableTimeSlot slot : slots) {
+            if (slot == null || slot.getDayOfWeek() == null) {
+                continue;
+            }
+            Set<Long> occupied = occupiedRooms.getOrDefault(
+                slot.getDayOfWeek() + "_" + slot.getTimeSlotId(), Collections.emptySet());
+            boolean usable = rooms.stream()
+                .filter(r -> !"LAB".equalsIgnoreCase(r.getRoomType()))
+                .filter(r -> roomScopeCompatible(r, academicYearId, sectionId))
+                .filter(r -> r.getCapacity() != null && r.getCapacity() >= requiredCapacity)
+                .filter(r -> !occupied.contains(r.getRoomId()))
+                .findAny()
+                .isPresent();
+            if (!usable) {
+                // Theory-only capacity relaxation, mirroring findAvailableRoom /
+                // the pre-assignment room scan.
+                usable = rooms.stream()
+                    .filter(r -> !"LAB".equalsIgnoreCase(r.getRoomType()))
+                    .filter(r -> roomScopeCompatible(r, academicYearId, sectionId))
+                    .filter(r -> !occupied.contains(r.getRoomId()))
+                    .findAny()
+                    .isPresent();
+            }
+            if (usable) {
+                cellsByDay.merge(slot.getDayOfWeek(), 1, Integer::sum);
+            }
+        }
+
+        List<PlannableTimeSlot> ordered = new ArrayList<>(slots);
+        ordered.sort(Comparator.comparingInt(
+            (PlannableTimeSlot s) -> -cellsByDay.getOrDefault(
+                s == null ? null : s.getDayOfWeek(), 0)));
+        slots.clear();
+        slots.addAll(ordered);
     }
 
     /**

@@ -338,7 +338,10 @@ public class TimetableGeneratorEngine {
             // continuous back-to-back block on ONE randomly chosen day.
             // The "Consecutive Periods per Session" dropdown is IGNORED for
             // lab/practical scheduling — the full weekly practical hours are
-            // placed as a single block.
+            // placed as a single block. Splitting the demand into several
+            // sessions would make each session claim a separate lab day, which
+            // the one-section-one-lab-block-per-day rule (LAB_DAYS) can only
+            // satisfy for a single LAB subject per week.
             int blockSize = practicalHours;
 
             // One single consecutive block containing ALL practical hours.
@@ -413,16 +416,28 @@ public class TimetableGeneratorEngine {
             theoryHoursMap.put(s.getId(), theory);
         }
 
-        // Per-day theory capacity: the section can hold one lesson per teaching
-        // slot per day, minus the practical and locked periods already placed on
-        // that day by STEP 8. The distribution plan uses this so it never plans
-        // more theory onto a day than the day can physically hold.
+        // Per-day theory capacity: the section can hold one lesson per free
+        // teaching slot per day, but ONLY when an eligible, still-free non-LAB
+        // classroom exists for that slot. The free-slot count ALONE is not the
+        // real capacity: a section that owns few (or heavily booked) classrooms
+        // cannot physically hold more lessons per day than it has free
+        // (slot x room) cells. Planning against the slot count alone made the
+        // plan promise more periods onto a room-starved day than placement could
+        // deliver; the STEP 10b fallback then had to spill the subject onto extra
+        // teaching days. Both signals remain enforced as HARD constraints at
+        // placement time (SectionClash / RoomClash / RoomType / RoomCapacity /
+        // RoomScope via findAvailableRoom + evaluateAllConstraints) — this only
+        // makes the plan match what placement can actually achieve.
+        int requiredCapacity = getRequiredCapacity(timetable);
         Map<String, Integer> dayCapacity = new HashMap<>();
         for (String day : WORKING_DAYS) {
             long placed = timetable.getEntries().stream()
                 .filter(e -> day.equals(e.getDayOfWeek()) && e.getTimeSlot() != null)
                 .count();
-            dayCapacity.put(day, Math.max(0, teachingSlots.size() - (int) placed));
+            int freeSlots = Math.max(0, teachingSlots.size() - (int) placed);
+            int freeRoomCells = countFreeTheoryRoomCells(
+                day, teachingSlots, requiredCapacity, allRooms, context, timetable);
+            dayCapacity.put(day, Math.min(freeSlots, freeRoomCells));
         }
 
         // Per-subject faculty daily capacity: the subject's assigned faculty may
@@ -1792,6 +1807,64 @@ public class TimetableGeneratorEngine {
             }
         }
         return true;
+    }
+
+    /**
+     * Counts the theory (slot x classroom) cells this section can still occupy on
+     * {@code day}: for every teaching slot the section is not already using, it is
+     * a usable cell when at least one eligible, non-LAB, unbooked classroom exists
+     * at that (day, slot). Eligibility is evaluated with EXACTLY the same rules the
+     * placement path applies in {@link #findAvailableRoom} — non-LAB room type,
+     * {@link #isRoomEligibleForTimetable} scoping, not already in
+     * {@code roomOccupancy}, and capacity &gt;= required, including the theory-only
+     * capacity relaxation applied when no room meets the required capacity. This is
+     * a read-only planning signal; it neither books a room nor relaxes a hard
+     * constraint, it only keeps the distribution plan from promising more periods
+     * on a day than placement can physically deliver.
+     */
+    private int countFreeTheoryRoomCells(String day, List<TimeSlot> teachingSlots,
+            int requiredCapacity, List<Classroom> allRooms, ConstraintContext context,
+            Timetable timetable) {
+
+        Set<Long> sectionSlotsInUse = timetable.getEntries().stream()
+            .filter(e -> day.equals(e.getDayOfWeek()) && e.getTimeSlot() != null)
+            .map(e -> e.getTimeSlot().getId())
+            .collect(Collectors.toSet());
+
+        int cells = 0;
+        for (TimeSlot slot : teachingSlots) {
+            if (sectionSlotsInUse.contains(slot.getId())) {
+                // The section already occupies this slot today: a second lesson
+                // here would breach the section clash hard constraint.
+                continue;
+            }
+            Set<Long> occupiedRooms = context.getRoomOccupancy()
+                .getOrDefault(day + "_" + slot.getId(), Collections.emptySet());
+
+            boolean hasSizedRoom = allRooms.stream()
+                .filter(r -> !"LAB".equalsIgnoreCase(r.getRoomType()))
+                .filter(r -> r.getCapacity() >= requiredCapacity)
+                .filter(r -> isRoomEligibleForTimetable(r, timetable))
+                .filter(r -> !occupiedRooms.contains(r.getId()))
+                .findAny()
+                .isPresent();
+
+            if (hasSizedRoom) {
+                cells++;
+                continue;
+            }
+            // Same theory-only capacity relaxation as findAvailableRoom.
+            boolean hasAnyRoom = allRooms.stream()
+                .filter(r -> !"LAB".equalsIgnoreCase(r.getRoomType()))
+                .filter(r -> isRoomEligibleForTimetable(r, timetable))
+                .filter(r -> !occupiedRooms.contains(r.getId()))
+                .findAny()
+                .isPresent();
+            if (hasAnyRoom) {
+                cells++;
+            }
+        }
+        return cells;
     }
 
     private Classroom findAvailableRoom(Subject subject, List<Classroom> allRooms,

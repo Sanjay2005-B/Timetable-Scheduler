@@ -15,6 +15,7 @@ import com.erp.timetable.module.timetable.engine.constraint.FacultyDailyHoursCon
 import com.erp.timetable.module.timetable.engine.constraint.FacultyWeeklyHoursConstraint;
 import com.erp.timetable.module.timetable.engine.constraint.LabConsecutiveBlockConstraint;
 import com.erp.timetable.module.timetable.engine.constraint.RoomTypeConstraint;
+import com.erp.timetable.module.timetable.engine.shared.SubjectDemandService;
 import com.erp.timetable.module.timetable.planning.model.AvailabilityFact;
 import com.erp.timetable.module.timetable.planning.model.OccupancyFact;
 import com.erp.timetable.module.timetable.planning.model.PlannableFaculty;
@@ -161,6 +162,11 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     // then competes on same-day consecutive runs. Still negligible next to
     // UNASSIGNED_LESSON_WEIGHT (1000), keeping the mandated hierarchy hard >
     // unassigned > idle-gap > distribution intact.
+    // The weight is applied to the ABSOLUTE deviation from the ideal day count
+    // (see theoryDistributionPenalty), so it also prices a day SHORT of the
+    // ideal. For block size 2 that is what makes the intended double/single
+    // day count the optimum instead of merely an upper bound; for block size 1
+    // the hard daily cap means the under-ideal term can never fire.
     // Public so the constraint tests can reference the exact weight they assert.
     public static final int EXTRA_THEORY_DAY_WEIGHT = COLLEGE_WIDE_MAX_DAILY_HOURS;
 
@@ -718,9 +724,11 @@ public class TimetableConstraintProvider implements ConstraintProvider {
      * Soft penalty for one (subject, section) group.
      *
      * <p>THEORY lessons cluster: {@link #EXTRA_THEORY_DAY_WEIGHT} points per
-     * teaching day beyond the ideal (computed from the THEORY lesson count so a
-     * mixed subject's theory component is never spread over more days than the
-     * daily cap allows), plus one point per non-consecutive gap between two
+     * teaching day of ABSOLUTE deviation from the ideal (computed from the THEORY
+     * lesson count and the subject's block size, so a mixed subject's theory
+     * component is scored on its own double/single pattern and never spread over
+     * more days than the daily cap allows, and never packed tighter than the
+     * pattern requires), plus one point per non-consecutive gap between two
      * same-day sessions. LAB lessons keep the original spread rule: one point
      * per same-day session beyond the first, where a session is a consecutive
      * run of periods. Practical blocks are strictly consecutive by the hard
@@ -771,9 +779,28 @@ public class TimetableConstraintProvider implements ConstraintProvider {
             ? lessons.get(0).getSubject().getSessionBlockSize() : null;
         int effectiveBlock = (blockOpt != null && blockOpt >= 1) ? blockOpt : 1;
         long ideal = idealTeachingDays(lessons.size(), effectiveBlock);
-        long penalty = Math.max(0L, (long) ordersByDay(lessons).size() - ideal)
-            * EXTRA_THEORY_DAY_WEIGHT;
-        for (List<Integer> orders : ordersByDay(lessons).values()) {
+        Map<String, List<Integer>> byDay = ordersByDay(lessons);
+        // TWO-SIDED deviation from the intended teaching-day count.
+        //
+        // The previous max(0, usedDays - ideal) form only ever punished
+        // SPREADING, never compaction. For block size 2 the intended day count is
+        // the double/single pattern (5 days for H=5..10), so a solution that
+        // packed the same lessons into 3 days scored exactly the same as the
+        // intended one (0 day penalty) and typically also scored better on the
+        // gap term, because a 5-lesson day always carries the forced lunch gap
+        // while one-lesson-per-day carries none. The solver therefore had no
+        // reason at all to prefer the intended distribution and picked the
+        // packed one. Penalising under-ideal compaction by the same weight makes
+        // the intended distribution the optimum for block size 2 and for a
+        // mixed theory/practical subject (whose theory component is scored here
+        // and whose lab component is scored by the lab spread rule).
+        //
+        // For block size 1 the ideal is ceil(n / 5), which the hard college-wide
+        // daily teaching cap already forces, so the under-ideal term can never
+        // fire on a feasible solution and the penalty stays a pure "do not
+        // spread" term.
+        long penalty = Math.abs((long) byDay.size() - ideal) * EXTRA_THEORY_DAY_WEIGHT;
+        for (List<Integer> orders : byDay.values()) {
             List<Integer> sorted = new ArrayList<>(orders);
             sorted.sort(Integer::compareTo);
             for (int i = 1; i < sorted.size(); i++) {
@@ -832,7 +859,18 @@ public class TimetableConstraintProvider implements ConstraintProvider {
                 return 1;
             }
             int doubleDays = Math.max(0, lessonCount - COLLEGE_WIDE_MAX_DAILY_HOURS);
-            int singleDays = lessonCount - doubleDays * 2;
+            int singleDays = lessonCount - doubleDays * blockSize;
+            if (singleDays < 0) {
+                // 2 * doubleDays overshot the demand, so not every period can be
+                // paired: fall back to as many complete doubles as the demand
+                // allows plus the leftover singles (H=11 -> 5 doubles + 1 single
+                // -> 6 days). Mirrors SubjectDemandService#idealDaySizes; without
+                // this correction the ideal came out one day short for every
+                // odd H > 5, which made the two-sided day penalty target a day
+                // count the shared distribution rule never produces.
+                doubleDays = lessonCount / blockSize;
+                singleDays = lessonCount - doubleDays * blockSize;
+            }
             return doubleDays + singleDays;
         }
         return Math.max(1L, (lessonCount + COLLEGE_WIDE_MAX_DAILY_HOURS - 1)
@@ -932,17 +970,18 @@ public class TimetableConstraintProvider implements ConstraintProvider {
         return true;
     }
 
-    /**
+/**
      * Per-subject practical block size for a lesson: the subject's own
      * {@code sessionBlockSize} is the source of truth and is honored verbatim
-     * (1 → one consecutive period, 2 → two). The global fallback
-     * Part 2: lab always uses full practicalHours as one block (ignore dropdown).
-     * Falls back to {@code globalPracticalBlockSize} only when subject is null.
+     * (1 → one consecutive period, 2 → two, 3 → three). The global fallback
+     * applies only when the subject is null.
      */
     private static int practicalBlockSizeFor(PlanningLesson lesson) {
         if (lesson.getSubject() == null) {
             return globalPracticalBlockSize;
         }
-        return lesson.getSubject().getPracticalHours();
+        return lesson.getSubject().getSessionBlockSize() != null
+            ? lesson.getSubject().getSessionBlockSize()
+            : 1;
     }
 }

@@ -1,0 +1,84 @@
+﻿DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1449|deptId=1230|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1450|deptId=1231|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1451|deptId=1232|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1452|deptId=1233|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1453|deptId=1234|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1454|deptId=1235|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1455|deptId=1236|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1456|deptId=1237|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1457|deptId=1238|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1458|deptId=1239|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1459|deptId=1240|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2
+DIAGRUN|CONTEXT|existingEntries=168|timetableId=null|sectionId=1460|deptId=1241|requiredCapacity=40|studentStrength=40
+    DIAGRUN|CELLS|day=MON|freeTheoryRoomCells=3| P1=0 P2=0 P3=0 P4=0 P6=1 P7=1 P8=1
+    DIAGRUN|CELLS|day=TUE|freeTheoryRoomCells=4| P1=0 P2=0 P3=0 P4=2 P6=1 P7=0 P8=1
+    DIAGRUN|CELLS|day=WED|freeTheoryRoomCells=9| P1=1 P2=1 P3=2 P4=2 P6=2 P7=0 P8=1
+    DIAGRUN|CELLS|day=THU|freeTheoryRoomCells=7| P1=2 P2=1 P3=0 P4=2 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=FRI|freeTheoryRoomCells=4| P1=0 P2=0 P3=1 P4=1 P6=0 P7=1 P8=1
+    DIAGRUN|CELLS|day=SAT|freeTheoryRoomCells=7| P1=1 P2=1 P3=1 P4=1 P6=0 P7=1 P8=2

@@ -97,7 +97,7 @@ public class SubjectDemandService {
         if ("LAB".equalsIgnoreCase(subject.getSubjectType())) return 1;
         Integer blockSize = subject.getSessionBlockSize();
         if (blockSize == null || blockSize < 1) return 1;
-        return Math.min(blockSize, 2);
+        return blockSize;
     }
 
     /**
@@ -120,7 +120,7 @@ public class SubjectDemandService {
         if (blockSize == null) {
             return globalPracticalBlockSize;
         }
-        return Math.min(Math.max(blockSize, 1), 2);
+        return Math.max(blockSize, 1);
     }
 
     /**
@@ -218,12 +218,36 @@ public class SubjectDemandService {
             // room for the subject's faculty (own-lab faculty-cap trap).
             Map<String, Integer> facultyCap = facultyDayCapacity.getOrDefault(subject.getId(), Map.of());
             Map<String, Integer> assigned = new LinkedHashMap<>();
-            for (int size : idealDaySizes(weeklyHours, blockSize)) {
+            List<Integer> daySizes = idealDaySizes(weeklyHours, blockSize);
+            for (int size : daySizes) {
                 List<String> mainLoopCandidates = blockSize <= 1
                     ? availableDays.stream().filter(d -> !assigned.containsKey(d)).toList()
                     : availableDays;
                 String bestDay = leastLoadedFittingDay(mainLoopCandidates, plannedLoad, dayCapacity, facultyCap, size);
                 if (bestDay == null) {
+                    if (blockSize <= 1 && size > 1) {
+                        // For single-period sessions, try to place the maximum
+                        // possible periods (up to 5, respecting faculty cap) on
+                        // any available day to make progress toward the minimum
+                        // teaching days rule (ceil(H/5)). Continue the loop so
+                        // remaining ideal sizes are also considered.
+                        List<String> fallbackCandidates = availableDays.stream()
+                            .filter(d -> !assigned.containsKey(d))
+                            .toList();
+                        if (!fallbackCandidates.isEmpty()) {
+                            String fallbackDay = fallbackCandidates.get(0);
+                            int dayCap = dayCapacity.getOrDefault(fallbackDay, Integer.MAX_VALUE);
+                            int facultyFree = facultyCap.getOrDefault(fallbackDay, Integer.MAX_VALUE);
+                            int maxAssign = Math.min(size, 5);
+                            maxAssign = Math.min(maxAssign, dayCap);
+                            maxAssign = Math.min(maxAssign, facultyFree);
+                            if (maxAssign >= 1) {
+                                plannedLoad.merge(fallbackDay, maxAssign, Integer::sum);
+                                assigned.merge(fallbackDay, maxAssign, Integer::sum);
+                                continue;
+                            }
+                        }
+                    }
                     break;
                 }
                 plannedLoad.merge(bestDay, size, Integer::sum);
@@ -232,14 +256,30 @@ public class SubjectDemandService {
 
             // Spill the remainder onto the days with the most remaining capacity
             // so the subject still keeps the minimum number of teaching days.
-            // For blockSize=1, each period must land on its OWN day — never more
-            // than 1 per day — so only UNASSIGNED days are considered.
+            // For blockSize=1 we prefer already-used days (minimises teaching days
+            // by filling days already in use) and respect the college-wide daily
+            // cap of 5. For blockSize>1 we use the original behaviour.
             int remaining = weeklyHours
                 - assigned.values().stream().mapToInt(Integer::intValue).sum();
             while (remaining > 0) {
-                List<String> spillCandidates = blockSize <= 1
-                    ? availableDays.stream().filter(d -> !assigned.containsKey(d)).toList()
-                    : availableDays;
+                List<String> spillCandidates;
+                if (blockSize <= 1) {
+                    // Prefer already-used days first (minimises teaching days),
+                    // then fall back to unused days.
+                    List<String> alreadyUsedDays = availableDays.stream()
+                        .filter(d -> assigned.containsKey(d))
+                        .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
+                        .toList();
+                    List<String> unusedDays = availableDays.stream()
+                        .filter(d -> !assigned.containsKey(d))
+                        .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
+                        .toList();
+                    spillCandidates = new ArrayList<>();
+                    spillCandidates.addAll(alreadyUsedDays);
+                    spillCandidates.addAll(unusedDays);
+                } else {
+                    spillCandidates = availableDays;
+                }
                 String bestDay = mostFreeDay(spillCandidates, plannedLoad, dayCapacity, facultyCap);
                 if (bestDay == null) {
                     break;
@@ -261,34 +301,38 @@ public class SubjectDemandService {
             }
 
             // Last resort: spread any still-unplaced remainder one-per-day across
-            // the least-loaded days.  For blockSize=1 each remaining period must
-            // land on its OWN day; for blockSize>1 the full remainder is placed on
-            // the single least-loaded day (backward-compatible clustering).
+            // the least-loaded days.  For blockSize=1 we pack periods onto
+            // already-used days first (up to the college-wide daily cap of 5),
+            // then fall back to unused days only when necessary — this preserves
+            // the minimum-teaching-days rule (ceil(H/5)).  For blockSize>1 the
+            // full remainder is placed on the single least-loaded day.
             if (remaining > 0) {
                 if (blockSize <= 1) {
-                    // Phase 1: fill unused days first (one period per day).
-                    List<String> unassignedDays = availableDays.stream()
-                        .filter(d -> !assigned.containsKey(d))
+                    // Phase 1: try to add periods to already-used days first
+                    // (minimises teaching days by filling days already in use).
+                    List<String> alreadyUsedDays = availableDays.stream()
+                        .filter(d -> assigned.containsKey(d))
                         .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
                         .toList();
-                    for (String day : unassignedDays) {
+                    for (String day : alreadyUsedDays) {
                         if (remaining <= 0) break;
-                        plannedLoad.merge(day, 1, Integer::sum);
-                        assigned.merge(day, 1, Integer::sum);
-                        remaining--;
+                        // College daily cap is 5 periods per day max.
+                        int maxAdd = 5 - plannedLoad.getOrDefault(day, 0);
+                        int chunk = Math.min(remaining, maxAdd);
+                        if (chunk > 0) {
+                            plannedLoad.merge(day, chunk, Integer::sum);
+                            assigned.merge(day, chunk, Integer::sum);
+                            remaining -= chunk;
+                        }
                     }
-                    // Phase 2: if still remaining, genuinely forced — place on the
-                    // least-loaded already-used day(s) and log it clearly.
+                    // Phase 2: if still remaining, fill unused days one period each.
                     if (remaining > 0) {
-                        List<String> alreadyUsedDays = availableDays.stream()
-                            .filter(d -> assigned.containsKey(d))
+                        List<String> unassignedDays = availableDays.stream()
+                            .filter(d -> !assigned.containsKey(d))
                             .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
                             .toList();
-                        for (String day : alreadyUsedDays) {
+                        for (String day : unassignedDays) {
                             if (remaining <= 0) break;
-                            log.warn("  ⚠ Last resort: forced 2nd period on {} — only {} unassigned day(s) available for {} required",
-                                day, unassignedDays.size(),
-                                unassignedDays.size() + alreadyUsedDays.size());
                             plannedLoad.merge(day, 1, Integer::sum);
                             assigned.merge(day, 1, Integer::sum);
                             remaining--;
@@ -404,11 +448,27 @@ public class SubjectDemandService {
         List<Integer> sizes = new ArrayList<>();
 
         if (blockSize <= 1) {
-            // Each period lands on its own day — one session per day.
-            for (int i = 0; i < weeklyHours; i++) {
-                sizes.add(1);
+            // Minimum-teaching-days clustering: distribute H periods across
+            // the fewest days possible, up to 5 periods per day (college-wide
+            // daily cap). This mirrors the Greedy planner's minimum-day rule.
+            int minDays = (weeklyHours + 4) / 5; // ceil(H/5)
+            List<Integer> minSizes = new ArrayList<>();
+            int remaining = weeklyHours;
+            for (int d = 0; d < minDays; d++) {
+                int thisDaySize = Math.min(5, remaining);
+                minSizes.add(thisDaySize);
+                remaining -= thisDaySize;
             }
-            return sizes;
+            // If there are leftover periods (should not happen with ceiling math),
+            // distribute them one per day onto already-used days.
+            while (remaining > 0) {
+                for (int d = 0; d < minSizes.size(); d++) {
+                    if (remaining <= 0) break;
+                    minSizes.set(d, minSizes.get(d) + 1);
+                    remaining--;
+                }
+            }
+            return minSizes;
         }
 
         if (blockSize == 2) {
