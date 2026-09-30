@@ -28,6 +28,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.CommandLineRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.crypto.password.PasswordEncoder;
 
 import java.time.LocalTime;
@@ -35,6 +36,29 @@ import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Seeds demo/development data (roles, demo accounts, time slots, sample
+ * departments, faculty, classrooms, subjects) and performs the legacy
+ * single-tenant -&gt; multi-college backfill.
+ *
+ * <p><strong>DEVELOPMENT ONLY.</strong> This bean is restricted to the local
+ * {@code h2} and {@code dev} profiles by an explicit allow-list, so it is
+ * disabled for {@code prod} and for every other profile. The allow-list is
+ * deliberate: it fails CLOSED, so an unrecognised or newly introduced
+ * production profile (staging, qa, ...) never gets demo data, whereas a
+ * deny-list of production profile names would fail OPEN.
+ *
+ * <p>Why production must not run this: besides creating demo rows, the runner
+ * also <em>modifies existing</em> records - it rewrites the password of any
+ * existing {@code student}/{@code faculty} account to the documented demo
+ * credentials, forces {@code isActive=true}, backfills {@code college_id} on
+ * every user/department/faculty, and grants {@code ROLE_COLLEGE_ADMIN} to every
+ * {@code ROLE_SUPER_ADMIN}. In production the schema and the tenant backfill
+ * are owned by Flyway (V9 creates the institution row, V12 creates the DEV001
+ * tenant, backfills {@code college_id} and grants {@code ROLE_COLLEGE_ADMIN}
+ * to platform admins), so this runner is redundant there and actively unsafe.
+ */
+@Profile({"h2", "dev"})
 @Configuration
 @RequiredArgsConstructor
 @Slf4j

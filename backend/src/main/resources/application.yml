@@ -1,7 +1,10 @@
 spring:
-  profiles:
-    active: h2
-
+  # NOTE: no default `spring.profiles.active` here on purpose. The base config
+  # must NOT auto-activate the h2 profile, otherwise a production run that
+  # forgets SPRING_PROFILES_ACTIVE silently boots against a local H2 file DB
+  # (ddl-auto=update, Flyway off, demo data seeded). Activate a profile
+  # explicitly instead: `--spring.profiles.active=h2` (local H2) or the
+  # `dev`/`prod` profile for PostgreSQL deployments.
   application:
     name: timetable-scheduler-api
 
