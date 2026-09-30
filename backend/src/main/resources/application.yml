@@ -43,7 +43,12 @@ spring:
   flyway:
     enabled: true
     locations: classpath:db/migration
-    baseline-on-migrate: true
+    # Must stay false: on a NON-EMPTY schema, baseline-on-migrate=true makes Flyway
+    # insert a BASELINE marker at version 1 and SKIP V1 entirely. V2 then fails with
+    # `relation "faculty" does not exist` because V2's FKs reference V1-only tables.
+    # V1.1__ensure_core_tables.sql exists only to REPAIR databases already baselined
+    # at V1 by the previous setting; it is not a substitute for running V1.
+    baseline-on-migrate: false
     validate-on-migrate: true
 
   jackson:
