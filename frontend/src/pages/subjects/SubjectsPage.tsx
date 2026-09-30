@@ -5,6 +5,7 @@ import { subjectApi, SubjectRequest, SubjectResponse } from '@/api/subjectApi'
 import { departmentApi } from '@/api/departmentApi'
 import { facultyApi } from '@/api/facultyApi'
 import SearchInput from '@/components/ui/SearchInput'
+import { QueryErrorMessage } from '@/components/ui/QueryErrorMessage'
 import { useHodScope } from '@/hooks/useHodScope'
 
 export default function SubjectsPage() {
@@ -35,7 +36,7 @@ export default function SubjectsPage() {
     isActive: true,
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['subjects', search, deptFilter, yearFilter, sectionFilter],
     queryFn: async () => {
       const res = await subjectApi.getSubjects({ search, departmentId: deptFilter, academicYearId: yearFilter, sectionId: sectionFilter, size: 50 })
@@ -43,7 +44,7 @@ export default function SubjectsPage() {
     },
   })
 
-  const { data: deptData } = useQuery({
+  const { data: deptData, isError: deptError, error: deptLoadError } = useQuery({
     queryKey: ['departments'],
     queryFn: async () => {
       const res = await departmentApi.getDepartments({ size: 100 })
@@ -51,7 +52,7 @@ export default function SubjectsPage() {
     },
   })
 
-  const { data: facultyData } = useQuery({
+  const { data: facultyData, isError: facultyError, error: facultyLoadError } = useQuery({
     queryKey: ['facultyListForSubjects'],
     queryFn: async () => {
       const res = await facultyApi.getFaculty({ size: 100 })
@@ -215,10 +216,14 @@ export default function SubjectsPage() {
         )}
       </div>
 
+      {deptError && <QueryErrorMessage error={deptLoadError} subject="departments" />}
+
       {isLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
+      ) : isError ? (
+        <QueryErrorMessage error={error} subject="subjects" variant="block" />
       ) : subjects.length === 0 ? (
         <div className="card">
           <div className="empty-state py-24">
@@ -359,6 +364,7 @@ export default function SubjectsPage() {
                   {isHod && (
                     <p className="text-[11px] text-slate-500 mt-1">Only faculty in your own department are listed.</p>
                   )}
+                  {facultyError && <QueryErrorMessage error={facultyLoadError} subject="faculty members" />}
                 </div>
               </div>
 

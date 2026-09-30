@@ -4,6 +4,7 @@ import { DoorOpen, Plus, Trash2, Edit2, Loader2, X, Building2, Users, Graduation
 import { classroomApi, ClassroomRequest, ClassroomResponse } from '@/api/classroomApi'
 import { departmentApi, DepartmentResponse, AcademicYearDto } from '@/api/departmentApi'
 import SearchInput from '@/components/ui/SearchInput'
+import { QueryErrorMessage } from '@/components/ui/QueryErrorMessage'
 import { useHodScope } from '@/hooks/useHodScope'
 
 export default function ClassroomsPage() {
@@ -29,7 +30,7 @@ export default function ClassroomsPage() {
     status: 'AVAILABLE',
   })
 
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['classrooms', search, typeFilter],
     queryFn: async () => {
       const res = await classroomApi.getClassrooms({ search, roomType: typeFilter, size: 50 })
@@ -37,7 +38,7 @@ export default function ClassroomsPage() {
     },
   })
 
-  const { data: deptData } = useQuery({
+  const { data: deptData, isError: deptError, error: deptLoadError } = useQuery({
     queryKey: ['departments'],
     queryFn: async () => {
       const res = await departmentApi.getDepartments({ size: 100 })
@@ -158,10 +159,14 @@ export default function ClassroomsPage() {
         </select>
       </div>
 
+      {deptError && <QueryErrorMessage error={deptLoadError} subject="departments" />}
+
       {isLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
+      ) : isError ? (
+        <QueryErrorMessage error={error} subject="classrooms" variant="block" />
       ) : classrooms.length === 0 ? (
         <div className="card">
           <div className="empty-state py-24">

@@ -4,6 +4,7 @@ import { Users, Plus, Trash2, Edit2, Loader2, X, Building2, Mail, Phone } from '
 import { facultyApi, FacultyRequest, FacultyResponse } from '@/api/facultyApi'
 import { departmentApi } from '@/api/departmentApi'
 import SearchInput from '@/components/ui/SearchInput'
+import { QueryErrorMessage } from '@/components/ui/QueryErrorMessage'
 import { useHodScope } from '@/hooks/useHodScope'
 
 export default function FacultyPage() {
@@ -34,7 +35,7 @@ export default function FacultyPage() {
   })
 
   // ── Fetch Faculty ───────────────────────────────────────────────
-  const { data, isLoading } = useQuery({
+  const { data, isLoading, isError, error } = useQuery({
     queryKey: ['faculty', search, deptFilter],
     queryFn: async () => {
       const res = await facultyApi.getFaculty({ search, departmentId: deptFilter, size: 50 })
@@ -43,7 +44,7 @@ export default function FacultyPage() {
   })
 
   // ── Fetch Departments for Dropdown ───────────────────────────────
-  const { data: deptData } = useQuery({
+  const { data: deptData, isError: deptError, error: deptLoadError } = useQuery({
     queryKey: ['departments'],
     queryFn: async () => {
       const res = await departmentApi.getDepartments({ size: 100 })
@@ -179,11 +180,15 @@ export default function FacultyPage() {
         </select>
       </div>
 
+      {deptError && <QueryErrorMessage error={deptLoadError} subject="departments" />}
+
       {/* Grid Cards */}
       {isLoading ? (
         <div className="flex justify-center py-20">
           <Loader2 className="w-8 h-8 text-accent-500 animate-spin" />
         </div>
+      ) : isError ? (
+        <QueryErrorMessage error={error} subject="faculty members" variant="block" />
       ) : facultyList.length === 0 ? (
         <div className="card">
           <div className="empty-state py-24">

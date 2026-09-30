@@ -8,6 +8,7 @@ import { departmentApi, DepartmentResponse } from '@/api/departmentApi'
 import { availabilityApi, TimeSlot } from '@/api/availabilityApi'
 import { useAuthStore } from '@/store/authStore'
 import { useHodScope } from '@/hooks/useHodScope'
+import { QueryErrorMessage } from '@/components/ui/QueryErrorMessage'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
@@ -45,7 +46,7 @@ export default function TimetablePage() {
   }
 
   // ── Fetch Departments ───────────────────────────────────────────
-  const { data: deptData, isError: deptError } = useQuery<DepartmentResponse[]>({
+  const { data: deptData, isError: deptError, error: deptLoadError } = useQuery<DepartmentResponse[]>({
     queryKey: ['departments'],
     queryFn: async () => {
       const res = await departmentApi.getDepartments({ size: 50 })
@@ -372,9 +373,7 @@ export default function TimetablePage() {
       )}
 
       {deptError && (
-        <p className="w-full text-xs text-danger">
-          Could not load departments from the server. Please refresh the page or verify the backend is running.
-        </p>
+        <QueryErrorMessage error={deptLoadError} subject="departments" />
       )}
 
       {/* ── Conflicts Modal ── */}
