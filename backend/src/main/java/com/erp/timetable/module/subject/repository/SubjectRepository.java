@@ -26,8 +26,8 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
     List<Subject> findByAssignedFacultyId(Long facultyId);
 
     @Query("SELECT s FROM Subject s WHERE " +
-           "(:search IS NULL OR LOWER(s.subjectCode) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(s.subjectName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+           "(:search IS NULL OR LOWER(s.subjectCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(s.subjectName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
            "(:deptId IS NULL OR s.department.id = :deptId) AND " +
            "(:academicYearId IS NULL OR s.academicYear.id = :academicYearId) AND " +
            "(:sectionId IS NULL OR s.section.id = :sectionId) AND " +
@@ -36,8 +36,8 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
 
     @Query("SELECT s FROM Subject s WHERE " +
            "((:collegeId IS NULL AND s.department.college IS NULL) OR s.department.college.id = :collegeId) AND " +
-           "(:search IS NULL OR LOWER(s.subjectCode) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(s.subjectName) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+           "(:search IS NULL OR LOWER(s.subjectCode) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(s.subjectName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
            "(:deptId IS NULL OR s.department.id = :deptId) AND " +
            "(:academicYearId IS NULL OR s.academicYear.id = :academicYearId) AND " +
            "(:sectionId IS NULL OR s.section.id = :sectionId) AND " +

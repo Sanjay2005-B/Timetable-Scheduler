@@ -22,9 +22,9 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     List<Classroom> findByDepartment_CollegeId(Long collegeId);
 
     @Query("SELECT c FROM Classroom c WHERE " +
-           "(:search IS NULL OR LOWER(c.roomNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(c.roomName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(c.building) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+           "(:search IS NULL OR LOWER(c.roomNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(c.roomName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(c.building) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
            "(:roomType IS NULL OR c.roomType = :roomType) AND " +
            "(:status IS NULL OR c.status = :status)")
     Page<Classroom> searchClassrooms(String search, String roomType, String status, Pageable pageable);
@@ -32,9 +32,9 @@ public interface ClassroomRepository extends JpaRepository<Classroom, Long> {
     @Query("SELECT c FROM Classroom c WHERE " +
            "((:collegeId IS NULL AND c.department.college IS NULL) OR c.department.college.id = :collegeId) AND " +
            "(:deptId IS NULL OR c.department.id = :deptId) AND " +
-           "(:search IS NULL OR LOWER(c.roomNumber) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(c.roomName) LIKE LOWER(CONCAT('%', :search, '%')) OR " +
-           "LOWER(c.building) LIKE LOWER(CONCAT('%', :search, '%'))) AND " +
+           "(:search IS NULL OR LOWER(c.roomNumber) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(c.roomName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
+           "LOWER(c.building) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%'))) AND " +
            "(:roomType IS NULL OR c.roomType = :roomType) AND " +
            "(:status IS NULL OR c.status = :status)")
     Page<Classroom> searchClassroomsByCollege(String search, Long deptId, Long collegeId, String roomType, String status, Pageable pageable);
