@@ -192,17 +192,26 @@ public class DepartmentScopeResolver {
     }
 
     /**
-     * The faculty member a subject is assigned to must belong to the HOD's
-     * department. A {@code null} faculty (an unassigned subject) is allowed.
+     * The faculty member assigned to a subject must belong to the SAME COLLEGE as
+     * the subject's department. Cross-department assignment inside one college is
+     * allowed (an HOD may draw on any department of their own college); assigning
+     * faculty from ANOTHER college is never allowed, for any caller. A {@code
+     * null} faculty (an unassigned subject) or an unresolvable college is a no-op.
      */
-    public void assertFacultyAssignable(Faculty faculty) {
-        Long restricted = restrictedDepartmentId();
-        if (restricted == null || faculty == null) {
+    public void assertFacultyAssignable(Department department, Faculty faculty) {
+        if (faculty == null) {
             return;
         }
-        if (faculty.getDepartment() == null
-                || !restricted.equals(faculty.getDepartment().getId())) {
-            throw new BusinessException("The selected faculty member does not belong to your department.");
+        Long departmentCollegeId = department != null && department.getCollege() != null
+                ? department.getCollege().getId() : null;
+        Long facultyCollegeId = faculty.getCollege() != null
+                ? faculty.getCollege().getId()
+                : (faculty.getDepartment() != null && faculty.getDepartment().getCollege() != null
+                    ? faculty.getDepartment().getCollege().getId() : null);
+        if (departmentCollegeId != null && facultyCollegeId != null
+                && !departmentCollegeId.equals(facultyCollegeId)) {
+            throw new BusinessException(
+                    "The selected faculty member belongs to a different college and cannot be assigned to this subject.");
         }
     }
 }

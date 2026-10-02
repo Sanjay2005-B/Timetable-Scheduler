@@ -13,6 +13,7 @@ import com.erp.timetable.module.department.entity.AcademicYear;
 import com.erp.timetable.module.department.entity.Department;
 import com.erp.timetable.module.department.entity.Section;
 import com.erp.timetable.module.department.repository.DepartmentRepository;
+import com.erp.timetable.module.department.repository.SectionRepository;
 import com.erp.timetable.module.faculty.entity.Faculty;
 import com.erp.timetable.module.faculty.repository.FacultyRepository;
 import com.erp.timetable.module.subject.entity.Subject;
@@ -34,10 +35,12 @@ import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalTime;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicLong;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -67,6 +70,7 @@ class FacultyRoleE2ETest {
     @Autowired private UserRepository userRepository;
     @Autowired private RoleRepository roleRepository;
     @Autowired private DepartmentRepository departmentRepository;
+@Autowired private SectionRepository sectionRepository;
     @Autowired private FacultyRepository facultyRepository;
     @Autowired private SubjectRepository subjectRepository;
     @Autowired private ClassroomRepository classroomRepository;
@@ -491,6 +495,94 @@ assertEquals(subjA.getSubjectCode(), data.get(0).get("entries").get(0).get("subj
         JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
 
         assertEquals(0, data.size(), "faculty with no assigned lessons must receive an empty array");
+    }
+
+    // ── New: the class (department / year / section) each entry belongs to ─
+
+    /**
+     * The Faculty "My Timetable" grid labels every cell with its class as
+     * DEPARTMENT-YEAR-SECTION, so {@code /timetable/my} has to expose the
+     * section's academic year alongside the department and section it already
+     * returned. A faculty teaching the same subject in two sections must get
+     * both, each with its own section - never merged, never dropped.
+     */
+    @Test
+    void faculty_myTimetable_exposesClassDataAndKeepsEachSectionSeparate() throws Exception {
+        Department dept = newDepartment("FR Class " + unique());
+        AcademicYear year = dept.getAcademicYears().get(0);
+        Section sectionA = year.getSections().get(0);
+        Section sectionB = Section.builder().name("B").studentStrength(60).status("ACTIVE").build();
+        year.addSection(sectionB);
+        sectionB = sectionRepository.saveAndFlush(sectionB);
+
+        User user = saveUser("fr_class_" + unique(), RoleName.ROLE_FACULTY, dept);
+        Faculty faculty = saveFaculty("FR-FAC-" + unique(), user, dept, user.getId());
+
+        Classroom classroom = saveClassroom(unique(), dept, 60);
+        TimeSlot slot = timeSlotRepository.save(TimeSlot.builder()
+            .slotOrder((int) (2000 + seq.get()))
+            .startTime(LocalTime.of(9, 0))
+            .endTime(LocalTime.of(10, 0))
+            .slotLabel("Period 1").isBreak(false).build());
+
+        Subject subjA = subjectRepository.save(Subject.builder()
+            .subjectCode("CLA").subjectName("Section A Subject")
+            .department(dept).academicYear(year).section(sectionA)
+            .assignedFaculty(faculty).semester(1).build());
+        Subject subjB = subjectRepository.save(Subject.builder()
+            .subjectCode("CLB").subjectName("Section B Subject")
+            .department(dept).academicYear(year).section(sectionB)
+            .assignedFaculty(faculty).semester(1).build());
+
+        Timetable ttA = Timetable.builder()
+            .academicSession("2026-2027 ODD").department(dept).section(sectionA).semester(1).build();
+        ttA.addEntry(TimetableEntry.builder()
+            .dayOfWeek("MON").timeSlot(slot).subject(subjA).faculty(faculty)
+            .classroom(classroom).section(sectionA).build());
+        timetableRepository.saveAndFlush(ttA);
+
+        Timetable ttB = Timetable.builder()
+            .academicSession("2026-2027 ODD").department(dept).section(sectionB).semester(1).build();
+        ttB.addEntry(TimetableEntry.builder()
+            .dayOfWeek("MON").timeSlot(slot).subject(subjB).faculty(faculty)
+            .classroom(classroom).section(sectionB).build());
+        timetableRepository.saveAndFlush(ttB);
+
+        String token = loginAccessToken(user.getUsername());
+        MvcResult result = mockMvc.perform(get("/timetable/my").header("Authorization", "Bearer " + token))
+            .andExpect(status().isOk())
+            .andReturn();
+        JsonNode data = objectMapper.readTree(result.getResponse().getContentAsString()).get("data");
+
+        assertEquals(2, data.size(),
+            "a faculty teaching two sections must receive one timetable per section");
+
+        for (JsonNode timetable : data) {
+            assertEquals(dept.getName(), timetable.get("departmentName").asText(),
+                "department name is needed to build DEPARTMENT-YEAR-SECTION");
+            assertEquals("1st Year", timetable.get("yearLabel").asText(),
+                "the section's academic year label must be exposed for the class label");
+            assertFalse(timetable.get("academicYearId").isNull(),
+                "academicYearId must be exposed alongside yearLabel");
+            assertEquals(1, timetable.get("entries").size(),
+                "each section's timetable carries only this faculty's own entry");
+            assertEquals(faculty.getId().longValue(),
+                timetable.get("entries").get(0).get("facultyId").asLong(),
+                "faculty isolation must be preserved: only the caller's own lessons");
+        }
+
+        // The two sections stay distinguishable, which is what lets the grid
+        // label one cell DEPT-I-A and the other DEPT-I-B.
+        List<String> sections = new ArrayList<>();
+        List<String> subjects = new ArrayList<>();
+        for (JsonNode timetable : data) {
+            sections.add(timetable.get("sectionName").asText());
+            subjects.add(timetable.get("entries").get(0).get("subjectCode").asText());
+        }
+        assertTrue(sections.contains("A") && sections.contains("B"),
+            "both sections must be returned separately, got: " + sections);
+        assertTrue(subjects.contains("CLA") && subjects.contains("CLB"),
+            "both sections' subjects must be returned, got: " + subjects);
     }
 
     // ── Profile stays available for Faculty ──────────────────────────────

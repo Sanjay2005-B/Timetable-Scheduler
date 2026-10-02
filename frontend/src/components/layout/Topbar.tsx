@@ -36,20 +36,31 @@ export default function Topbar({ onToggleSidebar, onToggleMobile, mobileOpen, si
         sidebarCollapsed ? 'lg:left-[60px]' : 'lg:left-[216px]'
       )}
     >
-      {/* Mobile: hamburger opens/closes the slide-in drawer */}
+      {/* Mobile (< lg): hamburger opens/closes the slide-in drawer. */}
       <button
         onClick={onToggleMobile}
-        className="btn-icon lg:hidden"
+        className="btn-icon lg:hidden!"
         aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
         aria-expanded={mobileOpen}
       >
         {mobileOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
       </button>
 
-      {/* Branding — the header's identity block */}
-      <div className="flex items-center gap-2 pr-3 mr-1 border-r border-line h-6">
-        <span className="text-[11px] font-bold uppercase tracking-wider">Timetable Scheduler</span>
-      </div>
+      {/* Desktop (>= lg): the same three-bar control collapses/expands the
+          docked rail. Only one of the two above is ever displayed at a given
+          breakpoint, so the visible one always dispatches to the matching
+          existing handler — no duplicated sidebar state. */}
+      <button
+        onClick={onToggleSidebar}
+        className="btn-icon hidden! lg:inline-flex!"
+        aria-label={sidebarCollapsed ? 'Expand navigation' : 'Collapse navigation'}
+        aria-expanded={!sidebarCollapsed}
+      >
+        <Menu className="w-4 h-4" />
+      </button>
+
+      {/* Divider between the menu control and the search field */}
+      <div className="pr-3 mr-1 border-r border-line h-6" aria-hidden="true" />
 
       {/* Search — same shared .search-input / .search-icon spec as the page search bars */}
       <div className="flex-1 min-w-0 max-w-sm">

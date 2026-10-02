@@ -104,21 +104,26 @@ class TimetableGeneratorEngineIntegrationTest {
             .filter(e -> e.getSubject() != null && e.getSubject().getId().equals(blockSubject.getId()))
             .toList();
 
-        // 1. Both sessions placed: 2 blocks × 2 periods = 4 entries.
+        // 1. All 4 periods placed.
         assertEquals(4, blockEntries.size(),
-            "double-period subject must be placed as 4 consecutive-period slots: " + blockEntries);
+            "double-period subject must be placed as 4 slots: " + blockEntries);
 
-        // 2. Theory clusters onto the minimum practical day: all 4 periods land
-        //    on a single day. The two 2-period block-sessions are placed as whole
-        //    units: either back-to-back as [4] or separated as [2, 2] depending
-        //    on slot availability.
-        List<Integer> runSizes = consecutiveRunSizes(blockEntries).stream().sorted().toList();
-        assertTrue(List.of(2, 2).equals(runSizes) || List.of(4).equals(runSizes),
-            "the 2 block-sessions must stay whole 2-period consecutive runs: " + runSizes);
-        assertEquals(1, blockEntries.stream().map(TimetableEntry::getDayOfWeek).distinct().count(),
-            "4 weekly hours must cluster onto a single day: " + blockEntries);
+        // 2. The NORMAL-subject distribution rule decides the shape from the
+        // weekly HOURS, not from the stored sessionBlockSize: a 4-hour subject
+        // is below the 5-period single-period threshold, so its plan is 1+1+1+1 —
+        // one period on each of 4 distinct days, never 4 periods on one day and
+        // never a 3- or 4-period run.
+        Map<String, Long> perDay = blockEntries.stream()
+            .collect(Collectors.groupingBy(TimetableEntry::getDayOfWeek, Collectors.counting()));
+        assertEquals(4, perDay.size(),
+            "a 4-hour NORMAL subject must use 4 distinct teaching days: " + blockEntries);
+        assertTrue(perDay.values().stream().allMatch(count -> count == 1L),
+            "no teaching day may hold more than one period of this subject: " + blockEntries);
+        List<Integer> runSizes = consecutiveRunSizes(blockEntries);
+        assertEquals(List.of(1, 1, 1, 1), runSizes,
+            "each period stands alone under the single-period pattern: " + runSizes);
         assertTrue(blockEntries.stream().noneMatch(e -> e.getTimeSlot().getSlotOrder() == 5),
-            "no block period may be a break slot (slot 5): " + blockEntries);
+            "no period may be a break slot (slot 5): " + blockEntries);
         // 3. The assigned faculty teaches every block slot (manual assignment preserved).
         assertTrue(blockEntries.stream().allMatch(e -> e.getFaculty().getId().equals(faculty.getId())));
 

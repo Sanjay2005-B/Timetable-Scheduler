@@ -293,12 +293,16 @@ class RoleBasedAccessE2ETest {
     }
 
     @Test
-    void hod_facultyCreate_ownDepartmentOk_foreignDenied() throws Exception {
+    void hod_facultyCreate_denied_forOwnAndForeignDepartment() throws Exception {
         Department own = newDepartment("R Bac HodFac " + unique());
         Department foreign = newDepartment("R Bac HodFacFor " + unique());
         saveUser("rbac_hod_fac", RoleName.ROLE_HOD, own);
         String token = loginAccessToken("rbac_hod_fac");
 
+        // Creating faculty is a college-administration action: an HOD is
+        // read-only on their own department, so even the OWN department is
+        // refused. (Viewing/editing existing own-department faculty is still
+        // allowed - see the faculty lifecycle E2E suite.)
         String ownEmpId = "FAC-" + unique();
         String ownBody = "{\"employeeId\":\"" + ownEmpId + "\",\"firstName\":\"X\",\"lastName\":\"Y\","
             + "\"email\":\"" + ownEmpId + "@college.edu\",\"departmentId\":" + own.getId() + ","
@@ -307,7 +311,7 @@ class RoleBasedAccessE2ETest {
                 .header("Authorization", "Bearer " + token)
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(ownBody))
-            .andExpect(status().isCreated());
+            .andExpect(status().isForbidden());
 
         String foreignEmpId = "FAC-" + unique() + "F";
         String foreignBody = "{\"employeeId\":\"" + foreignEmpId + "\",\"firstName\":\"X\",\"lastName\":\"Y\","

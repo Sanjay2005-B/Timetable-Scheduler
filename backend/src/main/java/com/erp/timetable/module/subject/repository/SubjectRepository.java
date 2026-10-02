@@ -17,6 +17,30 @@ public interface SubjectRepository extends JpaRepository<Subject, Long> {
 
     boolean existsBySubjectCode(String subjectCode);
 
+    /**
+     * Business rule part 1: within a department a subject code must map to exactly
+     * ONE academic year. Returns true when the same code already belongs to a
+     * DIFFERENT academic year of the same department. Multiple rows in the SAME
+     * year (one per section) are intentionally allowed.
+     */
+    boolean existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdNot(
+        Long departmentId, String subjectCode, Long academicYearId);
+
+    /** Update-path variant of part 1 that ignores the record being edited. */
+    boolean existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdNotAndIdNot(
+        Long departmentId, String subjectCode, Long academicYearId, Long id);
+
+    /**
+     * Business rule part 2: the same code may be repeated across DIFFERENT sections
+     * of one year, but never twice for the exact same department + year + section.
+     */
+    boolean existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdAndSection_Id(
+        Long departmentId, String subjectCode, Long academicYearId, Long sectionId);
+
+    /** Update-path variant of part 2 that ignores the record being edited. */
+    boolean existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdAndSection_IdAndIdNot(
+        Long departmentId, String subjectCode, Long academicYearId, Long sectionId, Long id);
+
     List<Subject> findByDepartmentId(Long departmentId);
 
     List<Subject> findByAcademicYearIdIn(List<Long> academicYearIds);

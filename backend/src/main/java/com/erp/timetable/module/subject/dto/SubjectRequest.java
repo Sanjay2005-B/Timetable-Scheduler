@@ -3,6 +3,7 @@ package com.erp.timetable.module.subject.dto;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Pattern;
 import jakarta.validation.constraints.Size;
 import lombok.*;
 
@@ -45,7 +46,8 @@ public class SubjectRequest {
     @Builder.Default
     private Integer practicalHours = 0;
 
-    @Size(max = 20, message = "Subject type cannot exceed 20 characters")
+    @Pattern(regexp = "THEORY|LAB|GAME|OTHER",
+             message = "Subject type must be one of THEORY, LAB, GAME, OTHER")
     @Builder.Default
     private String subjectType = "THEORY";
 

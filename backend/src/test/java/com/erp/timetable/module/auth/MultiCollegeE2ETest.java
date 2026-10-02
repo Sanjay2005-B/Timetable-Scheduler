@@ -674,6 +674,56 @@ class MultiCollegeE2ETest {
             .andExpect(status().isUnauthorized());
     }
 
+    @Test
+    void subjectFacultyAssignment_allowsSameCollegeCrossDepartment_butRejectsCrossCollege() throws Exception {
+        String adminToken = loginToken("admin", ADMIN_PW);
+
+        String loginA = unique("Z9FADM");
+        String loginB = unique("ZAFADM");
+        createCollege(adminToken, unique("FacA College"), "Z9F", loginA);
+        createCollege(adminToken, unique("FacB College"), "ZAF", loginB);
+        String adminA = loginToken(loginA, PW);
+        String adminB = loginToken(loginB, PW);
+
+        // College A has TWO departments; the subject lives in A-CSE while the
+        // faculty lives in sibling department A-ECE (same college).
+        long deptACse = createDepartment(adminA, "FAC-A-CSE", null, null);
+        long deptAEce = createDepartment(adminA, "FAC-A-ECE", null, null);
+        long facAEce = createFaculty(adminA, deptAEce, unique("FAE"));
+        long[] ysA = firstYearSectionOf(adminA, deptACse);
+
+        // Same-college cross-department assignment → 201.
+        long subj = createSubject(adminA, deptACse, ysA[0], ysA[1], facAEce, unique("SFAC"));
+        assertTrue(subj > 0);
+
+        // College B has its own faculty in its own department.
+        long deptB = createDepartment(adminB, "FAC-B-ME", null, null);
+        long facB = createFaculty(adminB, deptB, unique("FBB"));
+
+        // Cross-college faculty assigned to an A subject → rejected (422).
+        mockMvc.perform(post("/subjects")
+                .header("Authorization", "Bearer " + adminA)
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"subjectCode\":\"" + unique("SCROSS") + "\",\"subjectName\":\"CrossCollege\","
+                    + "\"departmentId\":" + deptACse + ",\"academicYearId\":" + ysA[0]
+                    + ",\"sectionId\":" + ysA[1] + ",\"facultyId\":" + facB
+                    + ",\"semester\":3,\"credits\":4,\"theoryHours\":3,\"practicalHours\":0,\"subjectType\":\"THEORY\"}"))
+            .andExpect(status().isUnprocessableEntity());
+
+        // GET /faculty/assignable exposes only the caller's college.
+        JsonNode aList = data(mockMvc.perform(get("/faculty/assignable")
+                .header("Authorization", "Bearer " + adminA))
+            .andExpect(status().isOk())
+            .andReturn());
+        boolean seesB = false;
+        for (JsonNode f : aList) {
+            if (f.hasNonNull("departmentId") && f.get("departmentId").asLong() == deptB) {
+                seesB = true;
+            }
+        }
+        assertFalse(seesB, "A's assignable faculty must not include college B's department");
+    }
+
     private int countName(MvcResult result, String value) throws Exception {
         JsonNode arr = data(result).get("content");
         int count = 0;

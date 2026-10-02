@@ -23,6 +23,12 @@ public interface FacultyRepository extends JpaRepository<Faculty, Long> {
 
     List<Faculty> findByDepartmentId(Long departmentId);
 
+    List<Faculty> findAllByOrderByFirstNameAsc();
+
+    List<Faculty> findByCollege_IdOrderByFirstNameAsc(Long collegeId);
+
+    List<Faculty> findByCollege_IdAndDepartment_IdOrderByFirstNameAsc(Long collegeId, Long departmentId);
+
     @Query("SELECT f FROM Faculty f WHERE " +
            "(:search IS NULL OR LOWER(f.firstName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +
            "LOWER(f.lastName) LIKE LOWER(CONCAT('%', CAST(:search AS string), '%')) OR " +

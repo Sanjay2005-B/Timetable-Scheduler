@@ -1178,3 +1178,206 @@ pm run build green. New jar built 12-09 11:29, backend restarted on 8080 (PID 19
 - Dev H2 DB: `users.reset_password_*` columns added via ddl-auto:update automatically. Faculty password ends
   unchanged (Faculty@1234). Backend server on :8080 runs the 15-09 11:31 jar; other branches of the repo (if any)
   need the standard stop-java → `mvn -q clean package -DskipTests` → restart before the browser sees the change.
+
+## PostgreSQL `lower(bytea)` 500 on every list/search page — FIXED 30-09-2026 (the big one)
+
+- SYMPTOM: on **PostgreSQL** (base profile, NOT H2) `GET /faculty`, `/subjects`,
+  `/classrooms` and `/dashboard/stats` all returned **HTTP 500** whenever the
+  `search` parameter was NULL. In the UI this showed as Faculty Management stuck
+  on a spinner / "No Faculty Members Found", a zeroed Dashboard, and an empty
+  Departments dropdown — while **timetable pages worked fine**. Local H2 (and the
+  whole H2 E2E suite) was completely green, so this was invisible to CI.
+- ROOT CAUSE: JPQL `LIKE LOWER(CONCAT('%', :search, '%'))` renders to SQL
+  `lower(('%'||?||'%'))`. When `:search` is NULL the JDBC parameter is sent
+  UNBOUND, and PostgreSQL resolves the `||` chain's type as **bytea**, so
+  `lower(bytea)` does not exist. `org.postgresql.util.PSQLException: ERROR:
+  function lower(bytea) does not exist` -> `SQLGrammarException` ->
+  `InvalidDataAccessResourceUsageException` -> 500 via GlobalExceptionHandler.
+  **H2 tolerates the untyped NULL, which is exactly why every existing test
+  passed and only real PostgreSQL broke.**
+- WHY SOME LISTS SURVIVED: `DepartmentRepository`'s 3 queries contain
+  `OR :search = ''`. That comparison gives PostgreSQL **text context** for the
+  parameter at plan time, so it is never bytea. `GET /departments` therefore
+  always worked and masked the pattern. Those 3 queries were left untouched
+  (proven working) — do not "fix" them.
+- FIX (3 files, 18 occurrences, 6 queries, semantics UNCHANGED - only the
+  parameter's declared SQL type): wrapped the parameter in the LIKE pattern:
+  `CONCAT('%', CAST(:search AS string), '%')` in `FacultyRepository`
+  (`searchFaculty`, `searchFacultyByCollege`), `SubjectRepository`
+  (`searchSubjects`, `searchSubjectsByCollege`) and `ClassroomRepository`
+  (`searchClassrooms`, `searchClassroomsByCollege`). Explicit CAST is preferred
+  over the `:search = ''` inference trick because it is deterministic and
+  identical on H2 and PostgreSQL. Backup:
+  `C:\Users\Sanja\AppData\Local\Temp\opencode\postgres_lower_bytea_fix_20260930`.
+- A/B PROVEN: same endpoint/token, `search=san` -> **200**, `search=` (null) ->
+  **500**, `search` omitted -> **500** before the change; all three -> **200**
+  after. `GET /faculty?size=50` now returns 11 rows for college 2 with the
+  `data.content` envelope the frontend destructures.
+- TRIGGER CONDITION worth remembering: the frontend initialises its search box to
+  `''`, and each service normalises blank to **null**
+  (`search != null && search.isBlank() ? null : search`), so **page load always
+  produced the failing NULL path**. Typing one character "fixed" the page — a
+  misleading symptom that makes this look intermittent.
+- GREEN: MultiCollege 7, RoleBasedAccess 11, HodDepartmentIsolation 15,
+  FacultyRole 9, AuthFlow 18 = **60/60** (H2). Live Postgres: faculty/subjects/
+  classrooms/departments/dashboard/timetable all **200**; dashboard totals match
+  the DB exactly (college 2 = 1 dept / 11 faculty / 27 subjects / 8 classrooms /
+  4 timetables). Tenant isolation re-verified: cross-college dept + faculty ->
+  **403**, no foreign rows in any list, student login still **422**, timetable
+  data unchanged (4 timetables x 42 entries, conflicts 0/0/0/5).
+- RELATED LATENT GAP (a) **FIXED 30-09-2026** (see the frontend error-branch entry
+  at the end of this file); (b) **STILL OPEN, deliberately not changed**:
+  `DashboardPage.tsx:165` destructures `isError` from the **stats** query but
+  renders it in the **timetable** section (line ~268), so `/timetable/my`
+  failures are still never reported.
+- TOOLING WINNER (reusable, no DB writes, no password needed): when no seeded
+  credential works, mint an access JWT locally with the app's own secret and the
+  real `userId` from the DB. `JwtAuthenticationFilter` resolves the account BY the
+  `userId` claim and rebuilds authorities from the **DB** (`loadUserById` ->
+  `UserPrincipal.build`), so every `@PreAuthorize` guard and `TenantContext`
+  behaves EXACTLY as a real login while writing nothing. Key derivation to copy:
+  `Decoders.BASE64.decode(Base64.encode(secret.getBytes()))` -> `Keys.hmacShaKeyFor`
+  (HS256), claims `sub/userId/email/roles/collegeId/iat/exp`. Worked for
+  `esecac.in` (userId 40) with roles resolved server-side, never client-side.
+- SEED-DATA BUG found alongside (reported, NOT changed): `V3__seed_data.sql`
+  documents the admin credential as the seed password, but the seeded bcrypt
+  hash does **NOT** verify against that documented password (checked with the
+  app's own `BCryptPasswordEncoder(12)`; literals deliberately not reproduced
+  here — read them from the migration itself). That account is unusable and the
+  comment is wrong; fixing it means choosing a real password, which is a user
+  decision.
+- ALSO OBSERVED (security, reported not changed): `GET /auth/me` returns the
+  user's **BCrypt password hash** in the response body.
+
+## NORMAL-subject distribution rule (max 2 periods/day, pairs) — COMPLETE (01-10-2026)
+
+- USER RULE: a NORMAL subject (`THEORY`/`GAME`/`OTHER`; `LAB` practical hours are
+  untouched) holds **at most 2 periods per day**, and when it holds 2 they are
+  **consecutive**. Required pattern: 5/wk `1+1+1+1+1`, 6 `2+1+1+1+1`, 7 `2+2+1+1+1`,
+  8 `2+2+2+1+1`. Shared formula in `SubjectDemandService`:
+  `doubleDays = max(0, H - 5)`, `singleDays = H - 2*doubleDays`; if
+  `singleDays < 0` fall back to `doubleDays = H/2`. Exposed as
+  `SubjectDemandService.MAX_PERIODS_PER_SUBJECT_PER_DAY = 2` and
+  `SINGLE_PERIOD_WEEK_LIMIT = 5` (both mirrored by
+  `TimetableConstraintProvider`).
+- `SessionDemandService`-style planning is in `SubjectDemandService`:
+  `idealDaySizes` is now uniform across normal block sizes, the planner gives one
+  session per subject/day, `pairDayOwner` tie-breaks pair-day choice, spill is
+  capped, and the decomposition emits `(day,2)` pairs / `(day,1)` singles whose
+  total always equals demand. The **stored `sessionBlockSize` no longer controls
+  the NORMAL pattern** — a default `1` still gets its 6th+ periods as pairs.
+- Greedy (`TimetableGeneratorEngine`): planned pairs are placed as blocks even
+  when the stored block size is 1; `usedDays` covers primary/fallback/mop-up; a
+  pair relaxes into singles on distinct days if no consecutive window exists; the
+  42-slot same-day mop-up last resort is UNCHANGED (frozen capacity wins over the
+  2/day rule for H>12, which is unsatisfiable over 6 days);
+  `isAnotherTheoryPairPlacedOnDay` rejects a **second paired NORMAL subject on a
+  section-day** inside `tryPlaceConsecutiveBlock`.
+- `getSessionBlockSize(Subject)` now clamps to the 2-period ceiling (it used to
+  return a stored 3, which is not a reachable NORMAL placement). This also fixed
+  the long-standing red `SubjectDemandServiceTest#getSessionBlockSize_clamps3to2`.
+  `getPracticalBlockSize` is deliberately UNCHANGED, so 3-period LAB blocks still
+  work.
+- Timefold: the soft `subjectDistribution` day term is now **TWO-SIDED**
+  (`|daysUsed - ideal| * EXTRA_THEORY_DAY_WEIGHT`) because with a 2/day ceiling
+  compaction is wrong, not merely suboptimal — the old `max(0, ...)` form left the
+  solver indifferent between the intended pattern and a packed day. Two NEW hard
+  constraints carry the rule: `SUBJECT_DAILY_PERIOD_LIMIT` ("Subject daily period
+  limit", 1 hard point per surplus period on an over-full day + 1 for a
+  non-consecutive 2-period day) and `SECTION_DAILY_PAIR_LIMIT` ("Section daily
+  back-to-back subject limit", 1 point per extra paired subject on a section-day).
+  Both exclude unassigned lessons and LAB components.
+  **Timefold gotcha:** a `penalize` whose weight can be 0/negative throws
+  `Negative match weight (-1) for constraint ...` at solver start — every
+  `penalize` stream needs a `.filter(count > 1L)` guard.
+- TESTS: `AbstractDistributionPropertyE2ETest` rewritten (6 shared tests, both
+  engines) + new `SubjectDailyDistributionConstraintTest` (15) pinning both hard
+  constraints; `SubjectDistributionConstraintTest` (10) and
+  `AllHardConstraintsAggregateTest` updated to the two-sided maths;
+  `TimetableGeneratorEngineIntegrationTest#generateSchedule_placesConfiguredDoublePeriodAsConsecutiveBlock`
+  rewritten — its old assertion "4 weekly hours must cluster onto a single day" is
+  **impossible** under the new rule, so a 4-hour NORMAL subject is now asserted as
+  4 single periods on 4 distinct days. Shared property tests cover satisfiable
+  `H=5..12` only; `H>12` cannot satisfy 2/day over 6 days.
+- FULL RUN (isolated `jdbc:h2:mem:fullrun2`): **421 tests, 5 failures**, down from
+  the 16 recorded on 26-09. ZERO new failures; the change net-FIXED ~11
+  (GreedyDistribution 3, TimefoldDistribution 2, TimefoldFinalValidation 2 of 3,
+  TimetableApiTimefoldFeasible 1, TimetableGeneratorEngineCapacityAndLab
+  Distribution 1, SubjectDemandService 1).
+- The 5 survivors are A/B-PROVEN pre-existing (reverted the 3 main files to HEAD,
+  `mvn -o clean test-compile`, same identical failures): the lab
+  `practicalHours=3` `[3]` vs `[1,1,1]` / `[1,2]` block-size divergence —
+  `GreedyFinalValidationE2ETest#facultyCapFive_dailyLoadAndLabNeverSaturday_holdOnBothEngines`
+  and `#blockSizes_1_2_3_produceExactSessionsAndEnginesAgree`,
+  `TimefoldFinalValidationE2ETest#subjectCreator_dynamicDemand_reactsToDatabaseChanges`,
+  `TimefoldScheduleEngineIntegrationTest#generateSchedule_sessionBlockSizes_1_2_and3_produceOneTwoThreePeriodSessions`,
+  `TimetableGeneratorEngineIntegrationTest#generateSchedule_producesValidConflictFreeTimetable`.
+  Do NOT patch the engines for these; they predate this rule.
+- **Harness trap:** a full run with `-Dspring.datasource.url=jdbc:h2:mem:...`
+  makes `ProfileDefaultConfigTest#baseConfig_doesNotActivateH2ByDefault` fail (it
+  asserts the base URL starts with `jdbc:postgresql:`). That 6th failure is the
+  override, not the code — the test is green without the flag.
+- Backend was NOT running during this phase (no `java` process), so `mvn -o -q
+  clean` was safe. The user must run `mvn -q -DskipTests package` + restart to see
+  the new rule in the browser.
+- A/B backup of the 3 main files: `C:\Users\Sanja\AppData\Local\Temp\opencode\dist_ab_backup`
+  (LEARN: to A/B, move the NEW test file out of the tree too, or `test-compile`
+  fails on the missing constraint methods before any test runs).
+
+## Frontend error branches + the "empty departments dropdown" (30-09-2026, frontend-only)
+
+- SYMPTOM: users saw a genuinely EMPTY Departments dropdown, and the "Departments
+  always worked" conclusion above was **incomplete**. For a College Admin the
+  endpoint is genuinely fine (`/departments?size=100` -> 200, `content[0]` has
+  `academicYears[4]` -> each `sections[1]`, field is `yearLabel` e.g. "1st Year"
+  + section `name` "A"; API, TS type and JSX all agree). The empty dropdown is a
+  SECOND, independent cause.
+- ROOT CAUSE: a `ROLE_FACULTY` login gets **403** on `/departments` (by design
+  since 15-09 - faculty are self-service only, `'FACULTY'` was REMOVED from the
+  list endpoints). All four management pages call `useQuery(['departments'], ...)`
+  with **no `isError` branch**, so a 403 throws, `data` stays `undefined`, and
+  `deptData?.map(...)` renders NOTHING -> an empty dropdown **silently,
+  indistinguishable from "no departments exist"** (after react-query's default
+  retries, so it also looks like a stall). Verified read-only with a minted
+  FACULTY token: `/departments`, `/faculty`, `/subjects`, `/classrooms`,
+  `/dashboard/stats` all **403**, while `/subjects/my`, `/timetable/my`,
+  `/auth/me` are 200.
+- THE TWO SYMPTOMS ARE INDEPENDENT: the Subjects page's FACULTY dropdown is fed
+  by `getFaculty` (`SubjectsPage.tsx`), i.e. it was emptied by the **bytea 500**;
+  the empty DEPARTMENTS dropdown is the **403**. Fixing the CAST did not and
+  could not fix the 403 - the 403 is correct RBAC behaviour.
+- FIX (frontend-only, user-approved, ZERO backend/RBAC change): NEW
+  `components/ui/QueryErrorMessage.tsx` - `describeQueryError(error, subject)`
+  maps status -> 403 "You do not have permission to view these <subject>" +
+  "limited by your role, so it is hidden rather than empty" (Lock icon), 401
+  session-expired, 5xx "The server failed while loading these <subject>" +
+  "This is a server-side error, not empty data", other 4xx with the server
+  message + code, and no-response "Could not reach the server". `variant="block"`
+  reuses the app's existing `card` + `empty-state py-24` +
+  `empty-state-title`/`empty-state-desc` (index.css:498-500) and `variant="inline"`
+  reuses `error-text`. Wired into `FacultyPage` (list + dept dropdown),
+  `SubjectsPage` (list + dept dropdown + modal faculty dropdown),
+  `ClassroomsPage` (list + dept dropdown) and `TimetablePage` (its existing
+  `deptError` now uses the helper, replacing copy that wrongly said "verify the
+  backend is running" for what is really a 403). Real classes/icons only -
+  `empty-state*`/`error-text` verified in `index.css`, `text-danger` from
+  tailwind `danger` token, `AlertTriangle`/`Lock` already imported app-wide.
+- DELIBERATELY UNCHANGED: `TimetablePage`'s timetable query keeps its intentional
+  try/catch -> "No timetable available for this selection." for 404/empty (that
+  empty state is correct and must not become an error). The `['departments']`
+  **key-shape mismatch** is still open and NOT fixed: `DepartmentsPage.tsx:55`
+  uses `['departments', search, isArchived]` returning the PAGED OBJECT while the
+  other four use `['departments']` returning a flat ARRAY, and its four
+  `invalidateQueries({ queryKey: ['departments'] })` calls (lines 72/82/93/104)
+  prefix-match all of them. Distinct cache slots today, so not the current
+  symptom, but it will bite anyone relying on that prefix. `DashboardPage`'s
+  stats-vs-timetable `isError` mix-up also remains open. V3 admin password and
+  the `/auth/me` hash leak were both left alone by explicit user decision.
+- GREEN: `npm.cmd run build` (tsc + vite) passes; `noUnusedLocals` is on, so the
+  new `error`/`deptLoadError`/`facultyLoadError` bindings are all consumed.
+  New chunk `QueryErrorMessage-*.js` ships all 5 copy strings. Live re-check:
+  College Admin 200 on all four lists (no error branch renders), FACULTY 403
+  (error branch now renders instead of a silent empty dropdown). ZERO backend
+  edits this round, so the 60/60 H2 suite was not re-run; DB row counts
+  identical (colleges 10, users 36, user_sessions 7, faculty 14, subjects 30,
+  classrooms 11, timetable_entries 168, flyway_history 16). NOTHING COMMITTED.

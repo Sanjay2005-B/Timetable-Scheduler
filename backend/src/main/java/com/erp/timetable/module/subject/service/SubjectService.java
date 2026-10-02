@@ -48,10 +48,6 @@ public class SubjectService {
 
     @Transactional
     public SubjectResponse createSubject(SubjectRequest request) {
-        if (subjectRepository.existsBySubjectCode(request.getSubjectCode())) {
-            throw new BusinessException("Subject with code '" + request.getSubjectCode() + "' already exists");
-        }
-
         Department department = request.getDepartmentId() != null ?
             departmentRepository.findById(request.getDepartmentId()).orElse(null) : null;
 
@@ -68,6 +64,7 @@ public class SubjectService {
         // and are not covered by the path-id guard (absent on create).
         assertScope(department, academicYear, section, assignedFaculty);
         validateHierarchy(department, academicYear, section);
+        assertSubjectCodeAvailable(request.getSubjectCode(), department, academicYear, section, null);
 
         Subject subject = Subject.builder()
             .subjectCode(request.getSubjectCode())
@@ -169,6 +166,7 @@ public class SubjectService {
 
         assertUpdateScope(department, academicYear, section, assignedFaculty);
         validateHierarchy(department, academicYear, section);
+        assertSubjectCodeAvailable(request.getSubjectCode(), department, academicYear, section, id);
 
         subject.setSubjectCode(request.getSubjectCode());
         subject.setSubjectName(request.getSubjectName());
@@ -209,7 +207,7 @@ public class SubjectService {
         departmentScopeResolver.assertDepartmentInScope(department);
         departmentScopeResolver.assertAcademicYearInScope(academicYear);
         departmentScopeResolver.assertSectionInScope(section);
-        departmentScopeResolver.assertFacultyAssignable(assignedFaculty);
+        departmentScopeResolver.assertFacultyAssignable(department, assignedFaculty);
     }
 
     /**
@@ -223,7 +221,45 @@ public class SubjectService {
         departmentScopeResolver.assertNotDetached(department);
         departmentScopeResolver.assertAcademicYearInScope(academicYear);
         departmentScopeResolver.assertSectionInScope(section);
-        departmentScopeResolver.assertFacultyAssignable(assignedFaculty);
+        departmentScopeResolver.assertFacultyAssignable(department, assignedFaculty);
+    }
+
+    /**
+     * Business rule for subject-code reuse. Section is neither a plain unique key
+     * nor ignored:
+     * <ul>
+     *   <li>a code may be repeated across DIFFERENT sections of the SAME academic
+     *       year of a department (e.g. CS266 to sections A, B and C of 1st year);</li>
+     *   <li>a code must map to exactly ONE academic year per department, so the same
+     *       code in another year (2nd/3rd/4th) of that department is rejected;</li>
+     *   <li>a different department is a separate code space; and</li>
+     *   <li>the same section + year may not hold the same code twice.</li>
+     * </ul>
+     * This year dependency cannot be expressed as a single SQL unique constraint,
+     * so it is enforced here; {@code excludeId} keeps the edited record from
+     * conflicting with itself on the update path.
+     */
+    private void assertSubjectCodeAvailable(String subjectCode, Department department,
+                                            AcademicYear academicYear, Section section, Long excludeId) {
+        boolean otherYear = excludeId == null
+            ? subjectRepository.existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdNot(
+                department.getId(), subjectCode, academicYear.getId())
+            : subjectRepository.existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdNotAndIdNot(
+                department.getId(), subjectCode, academicYear.getId(), excludeId);
+        if (otherYear) {
+            throw new BusinessException("Subject code '" + subjectCode
+                + "' is already used in another academic year of this department");
+        }
+
+        boolean sameOffering = excludeId == null
+            ? subjectRepository.existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdAndSection_Id(
+                department.getId(), subjectCode, academicYear.getId(), section.getId())
+            : subjectRepository.existsByDepartment_IdAndSubjectCodeAndAcademicYear_IdAndSection_IdAndIdNot(
+                department.getId(), subjectCode, academicYear.getId(), section.getId(), excludeId);
+        if (sameOffering) {
+            throw new BusinessException("Subject with code '" + subjectCode
+                + "' already exists for this section and academic year");
+        }
     }
 
     /**

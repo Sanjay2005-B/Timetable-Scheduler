@@ -23,7 +23,7 @@ public class Subject extends AuditableEntity {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    @Column(name = "subject_code", nullable = false, unique = true, length = 30)
+    @Column(name = "subject_code", nullable = false, length = 30)
     private String subjectCode;
 
     @Column(name = "subject_name", nullable = false, length = 200)
@@ -62,7 +62,7 @@ public class Subject extends AuditableEntity {
 
     @Column(name = "subject_type", nullable = false, length = 20)
     @Builder.Default
-    private String subjectType = "THEORY"; // THEORY, LAB, ELECTIVE, MANDATORY
+    private String subjectType = "THEORY"; // THEORY, LAB, GAME, OTHER
 
     @Column(name = "total_semester_hours", nullable = false)
     @Builder.Default

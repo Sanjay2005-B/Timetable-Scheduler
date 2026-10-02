@@ -11,7 +11,7 @@ export default function FacultyPage() {
   const queryClient = useQueryClient()
   // Faculty are confined to the HOD's own department: the backend scopes the
   // list and rejects any other departmentId, so the form is pinned to match.
-  const { isHod, departmentId } = useHodScope()
+  const { isHod, isHodReadOnly, departmentId } = useHodScope()
   const [search, setSearch] = useState('')
   const [deptFilter, setDeptFilter] = useState<number | undefined>(undefined)
   const [isModalOpen, setIsModalOpen] = useState(false)
@@ -56,7 +56,14 @@ export default function FacultyPage() {
   const saveMutation = useMutation({
     mutationFn: async () => {
       if (editingFaculty) {
-        await facultyApi.updateFaculty(editingFaculty.id, formData)
+        // Credentials are create-only ("ignored on update" server-side), and the
+        // password is validated with a 6-character minimum - so sending the
+        // form's empty password field back would be rejected as a 400 before the
+        // update ever ran. Omit both on edit.
+        const payload: FacultyRequest = { ...formData }
+        delete payload.password
+        delete payload.username
+        await facultyApi.updateFaculty(editingFaculty.id, payload)
       } else {
         await facultyApi.createFaculty(formData)
       }
@@ -154,9 +161,11 @@ export default function FacultyPage() {
           <h1 className="page-title">Faculty Management</h1>
           <p className="page-subtitle">Manage faculty profiles, designations, and workload constraints</p>
         </div>
-        <button onClick={openCreateModal} className="btn-primary">
-          <Plus className="w-4 h-4" /> Add Faculty Member
-        </button>
+        {!isHodReadOnly && (
+          <button onClick={openCreateModal} className="btn-primary">
+            <Plus className="w-4 h-4" /> Add Faculty Member
+          </button>
+        )}
       </div>
 
       {/* Search & Dept Filter */}

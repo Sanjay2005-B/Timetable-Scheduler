@@ -52,13 +52,30 @@ export default function SubjectsPage() {
     },
   })
 
-  const { data: facultyData, isError: facultyError, error: facultyLoadError } = useQuery({
-    queryKey: ['facultyListForSubjects'],
+  const { data: assignableFaculty, isError: facultyError, error: facultyLoadError } = useQuery({
+    queryKey: ['assignableFaculty'],
     queryFn: async () => {
-      const res = await facultyApi.getFaculty({ size: 100 })
-      return res.data.data?.content || []
+      const res = await facultyApi.getAssignableFaculty()
+      return res.data.data || []
     },
   })
+
+  const [facultyDeptFilter, setFacultyDeptFilter] = useState<number | undefined>(undefined)
+
+  // Departments that actually hold assignable faculty, derived from the list so
+  // a College Admin can reach every department while an HOD (who only sees their
+  // own department in /departments) can still reach same-college siblings.
+  const facultyDepts = Array.from(
+    new Map(
+      (assignableFaculty || [])
+        .filter((f) => f.departmentId != null)
+        .map((f) => [f.departmentId as number, f.departmentName || 'Department'])
+    ).entries()
+  ).map(([id, name]) => ({ id, name }))
+
+  const visibleFaculty = (assignableFaculty || []).filter(
+    (f) => facultyDeptFilter === undefined || f.departmentId === facultyDeptFilter
+  )
 
   const saveMutation = useMutation({
     mutationFn: async () => {
@@ -85,10 +102,11 @@ export default function SubjectsPage() {
   const openCreateModal = () => {
     saveMutation.reset()
     setEditingSubject(null)
+    const initialDept = isHod ? departmentId ?? undefined : deptData && deptData.length > 0 ? deptData[0].id : undefined
     setFormData({
       subjectCode: `CS${Math.floor(Math.random() * 900) + 100}`,
       subjectName: '',
-      departmentId: isHod ? departmentId ?? undefined : deptData && deptData.length > 0 ? deptData[0].id : undefined,
+      departmentId: initialDept,
       academicYearId: undefined,
       sectionId: undefined,
       facultyId: undefined,
@@ -100,6 +118,7 @@ export default function SubjectsPage() {
       sessionBlockSize: 1,
       isActive: true,
     })
+    setFacultyDeptFilter(initialDept)
     setIsModalOpen(true)
   }
 
@@ -121,6 +140,7 @@ export default function SubjectsPage() {
       sessionBlockSize: s.sessionBlockSize ?? 1,
       isActive: s.isActive,
     })
+    setFacultyDeptFilter(s.departmentId ?? undefined)
     setIsModalOpen(true)
   }
 
@@ -349,7 +369,11 @@ export default function SubjectsPage() {
                     value={formData.departmentId || ''}
                     disabled={isHod}
                     title={isHod ? 'You can only manage subjects in your own department' : undefined}
-                    onChange={(e) => setFormData({ ...formData, departmentId: e.target.value ? Number(e.target.value) : undefined, academicYearId: undefined, sectionId: undefined })}
+                    onChange={(e) => {
+                      const d = e.target.value ? Number(e.target.value) : undefined
+                      setFormData({ ...formData, departmentId: d, academicYearId: undefined, sectionId: undefined })
+                      setFacultyDeptFilter(d)
+                    }}
                   >
                     <option value="">Select Dept</option>
                     {deptData?.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
@@ -357,13 +381,25 @@ export default function SubjectsPage() {
                 </div>
                 <div className="form-group">
                   <label className="label">Assigned Faculty</label>
-                  <select className="input" value={formData.facultyId || ''} onChange={(e) => setFormData({ ...formData, facultyId: e.target.value ? Number(e.target.value) : undefined })}>
-                    <option value="">Select Faculty</option>
-                    {facultyData?.map((f) => <option key={f.id} value={f.id}>{f.fullName} ({f.designation})</option>)}
-                  </select>
-                  {isHod && (
-                    <p className="text-[11px] text-slate-500 mt-1">Only faculty in your own department are listed.</p>
-                  )}
+                  <div className="flex gap-2">
+                    <select
+                      className="input w-1/2"
+                      value={facultyDeptFilter ?? ''}
+                      onChange={(e) => {
+                        const d = e.target.value ? Number(e.target.value) : undefined
+                        setFacultyDeptFilter(d)
+                        setFormData((prev) => ({ ...prev, facultyId: undefined }))
+                      }}
+                    >
+                      <option value="">All Departments</option>
+                      {facultyDepts.map((d) => <option key={d.id} value={d.id}>{d.name}</option>)}
+                    </select>
+                    <select className="input w-1/2" value={formData.facultyId || ''} onChange={(e) => setFormData({ ...formData, facultyId: e.target.value ? Number(e.target.value) : undefined })}>
+                      <option value="">Select Faculty</option>
+                      {visibleFaculty.map((f) => <option key={f.id} value={f.id}>{f.fullName} ({f.designation})</option>)}
+                    </select>
+                  </div>
+                  <p className="text-[11px] text-slate-500 mt-1">Faculty from any department in your college are listed. Faculty from another college cannot be assigned.</p>
                   {facultyError && <QueryErrorMessage error={facultyLoadError} subject="faculty members" />}
                 </div>
               </div>
@@ -395,8 +431,8 @@ export default function SubjectsPage() {
                   <select className="input" value={formData.subjectType} onChange={(e) => setFormData({ ...formData, subjectType: e.target.value })}>
                     <option value="THEORY">THEORY</option>
                     <option value="LAB">LAB</option>
-                    <option value="ELECTIVE">ELECTIVE</option>
-                    <option value="MANDATORY">MANDATORY</option>
+                    <option value="GAME">GAME</option>
+                    <option value="OTHER">OTHER</option>
                   </select>
                 </div>
               </div>

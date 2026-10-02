@@ -1,24 +1,67 @@
 import { useQuery } from '@tanstack/react-query'
-import { Calendar, User, Building2, Loader2, AlertTriangle } from 'lucide-react'
+import { Calendar, User, Building2, Layers, Loader2, AlertTriangle } from 'lucide-react'
 import { timetableApi, TimetableResponse, TimetableEntryDto } from '@/api/timetableApi'
 import { availabilityApi, TimeSlot } from '@/api/availabilityApi'
 import { useAuthStore } from '@/store/authStore'
 
 const DAYS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT']
 
+/** Converts any positive integer to its Roman numeral form (1 → I, 4 → IV). */
+function toRoman(value: number): string {
+  const table: Array<[number, string]> = [
+    [1000, 'M'], [900, 'CM'], [500, 'D'], [400, 'CD'], [100, 'C'], [90, 'XC'],
+    [50, 'L'], [40, 'XL'], [10, 'X'], [9, 'IX'], [5, 'V'], [4, 'IV'], [1, 'I'],
+  ]
+  let remaining = value
+  let out = ''
+  for (const [amount, symbol] of table) {
+    while (remaining >= amount) {
+      out += symbol
+      remaining -= amount
+    }
+  }
+  return out
+}
+
+/**
+ * Academic years are stored as free text seeded by the college ("1st Year",
+ * "2nd Year", ...), so the display numeral is derived rather than stored: any
+ * label carrying a number becomes its Roman numeral ("1st Year" → "I"), a label
+ * already written as a numeral is kept ("Year II" → "II"), and anything else is
+ * passed through untouched.
+ */
+function yearToRoman(yearLabel?: string | null): string {
+  const trimmed = (yearLabel ?? '').trim()
+  if (!trimmed) return ''
+  const numeric = trimmed.match(/\d+/)
+  if (numeric) {
+    const value = parseInt(numeric[0], 10)
+    if (Number.isFinite(value) && value > 0) return toRoman(value)
+  }
+  const roman = trimmed.match(/([IVXLCDM]+)/i)
+  if (roman) return roman[1].toUpperCase()
+  return trimmed
+}
+
+/** The class a timetable belongs to, as DEPARTMENT-YEAR-SECTION (e.g. CSE-I-A). */
+function classLabel(timetable: TimetableResponse): string {
+  return [timetable.departmentName, yearToRoman(timetable.yearLabel), timetable.sectionName]
+    .map((part) => (part ?? '').trim())
+    .filter(Boolean)
+    .join('-')
+}
+
 export default function MyTimetablePage() {
   const { user } = useAuthStore()
-  const timetableUserId = user?.userId
-  console.log('[MyTimetable] render - userId:', timetableUserId, 'roles:', user?.roles)
+  // The timetable is always requested from the server: identity comes from the
+  // JWT, so a stale/absent client-side userId must never suppress the fetch and
+  // make a faculty member with real lessons look like they have no timetable.
   const { data: timetables, isLoading, isError } = useQuery<TimetableResponse[]>({
-    queryKey: ['myTimetable', timetableUserId],
+    queryKey: ['myTimetable', user?.userId],
     queryFn: async () => {
-      console.log('[MyTimetable] queryFn executing - userId:', timetableUserId)
       const res = await timetableApi.getMyTimetable()
-      console.log('[MyTimetable] queryFn response - status:', res.status, 'data keys:', res.data?.data?.length || 0)
       return res.data?.data || []
     },
-    enabled: !!timetableUserId,
   })
 
   const { data: timeSlotData } = useQuery<TimeSlot[]>({
@@ -36,8 +79,8 @@ export default function MyTimetablePage() {
 
   const isFaculty = user?.roles?.includes('ROLE_FACULTY')
 
-  const renderCombinedTimetable = () => {
-    const allEntries: TimetableEntryDto[] = (timetables ?? []).flatMap((t) => t.entries ?? [])
+  const renderTimetableGrid = (entries: TimetableEntryDto[], gridClass?: string) => {
+    const allEntries: TimetableEntryDto[] = entries ?? []
     const columns: { key: string; label: string }[] = useMasterSlots
       ? masterColumns.map((ts) => ({
           key: String(ts.id),
@@ -100,9 +143,18 @@ export default function MyTimetablePage() {
                             </span>
                           </div>
                           <div className="text-[10px] font-medium text-slate-700 truncate">{entry.subjectName}</div>
-                          <div className="text-[9px] text-slate-600 flex items-center gap-1">
-                            <User className="w-2.5 h-2.5 text-slate-500" /> {entry.facultyName}
-                          </div>
+                          {/* Faculty never need their own name on their own
+                              timetable — they get the class instead. Students keep
+                              the faculty name, which is the useful detail for them. */}
+                          {isFaculty ? (
+                            <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                              <Layers className="w-2.5 h-2.5 text-slate-500" /> {gridClass}
+                            </div>
+                          ) : (
+                            <div className="text-[9px] text-slate-600 flex items-center gap-1">
+                              <User className="w-2.5 h-2.5 text-slate-500" /> {entry.facultyName}
+                            </div>
+                          )}
                           <div className="text-[9px] text-slate-600 flex items-center gap-1">
                             <Building2 className="w-2.5 h-2.5 text-green-600" /> {entry.roomName || `Room ${entry.roomNumber}`}
                           </div>
@@ -160,7 +212,25 @@ export default function MyTimetablePage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {renderCombinedTimetable()}
+          {/* Faculty get one grid per timetable so a subject taught in several
+              sections keeps its own DEPARTMENT-YEAR-SECTION label instead of
+              being merged into a single grid. Students keep the single merged
+              grid they had before. */}
+          {isFaculty
+            ? (timetables ?? []).map((timetable) => (
+                <div key={timetable.id} className="space-y-2">
+                  {timetables!.length > 1 && (
+                    <div className="text-[11px] font-bold text-slate-600 uppercase tracking-wider">
+                      {classLabel(timetable)}
+                      <span className="font-medium normal-case tracking-normal text-slate-500">
+                        {' '}· Semester {timetable.semester} · {timetable.academicSession}
+                      </span>
+                    </div>
+                  )}
+                  {renderTimetableGrid(timetable.entries ?? [], classLabel(timetable))}
+                </div>
+              ))
+            : renderTimetableGrid((timetables ?? []).flatMap((t) => t.entries ?? []))}
         </div>
       )}
     </div>

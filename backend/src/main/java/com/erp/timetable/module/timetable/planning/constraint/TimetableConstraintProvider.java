@@ -61,6 +61,10 @@ import java.util.stream.Collectors;
  *       {@code getRequiredCapacity} (room capacity &gt;= section strength)</li>
  *   <li>{@link #LAB_CONSECUTIVE_BLOCK} — {@link LabConsecutiveBlockConstraint}</li>
  *   <li>{@link #CONSECUTIVE_TEACHING_RULE} — {@link ConsecutiveTeachingConstraint}</li>
+ *   <li>{@link #SUBJECT_DAILY_PERIOD_LIMIT} — a NORMAL subject holds at most 2
+ *       periods on a day, back-to-back when it holds 2 (the hard form of the
+ *       Greedy planner's pair/single distribution rule; LAB components
+ *       excluded).</li>
  * </ul>
  *
  * <p><b>Greedy vs Timefold semantic notes.</b> The Greedy engine decides
@@ -101,17 +105,18 @@ import java.util.stream.Collectors;
  *   <li>{@link #idleGap(ConstraintFactory)} minimises faculty idle gaps — free
  *       non-break windows strictly between a faculty member's first and last
  *       teaching period of a day (one soft point per idle window).</li>
- *   <li>{@link #subjectDistribution(ConstraintFactory)} clusters repeated
- *       sessions of the same subject onto as few teaching days as possible —
- *       one soft point per extra teaching day beyond the ideal
- *       ({@code idealDaySizes}: ≤6 hours → 1 day, else three-hour days with the
- *       remainder folded into the last), plus one soft point per non-consecutive
- *       gap between two same-day theory sessions.</li>
+ *   <li>{@link #subjectDistribution(ConstraintFactory)} steers repeated sessions
+ *       of the same subject onto the pair/single teaching-day pattern
+ *       ({@code idealTeachingDays}: up to 5 weekly periods → one per day, the
+ *       surplus → consecutive pairs, so 6/7/8/9/10 hours all use 5 days and 11
+ *       uses 6) — {@value #EXTRA_THEORY_DAY_WEIGHT} soft points per day of
+ *       deviation, plus one soft point per non-consecutive gap between two
+ *       same-day theory sessions.</li>
  * </ul>
  * Feasibility (hard score zero) therefore does not require every lesson to be
  * scheduled; at equal unassigned counts a compacted schedule outscores a gapped
- * one, and at equal unassigned and idle counts a schedule with each subject's
- * sessions clustered onto few consecutive days outscores a scattered one.
+ * one, and at equal unassigned and idle counts a schedule matching each subject's
+ * pair/single distribution outscores a scattered one.
  */
 public class TimetableConstraintProvider implements ConstraintProvider {
 
@@ -133,6 +138,8 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     public static final String UNASSIGNED_LESSONS = "Minimize unassigned lessons";
     public static final String IDLE_GAP = "Minimize faculty idle gaps";
     public static final String SUBJECT_DISTRIBUTION = "Cluster subject sessions into few teaching days";
+    public static final String SUBJECT_DAILY_PERIOD_LIMIT = "Subject daily period limit";
+    public static final String SECTION_DAILY_PAIR_LIMIT = "Section daily back-to-back subject limit";
 
     // Soft weight of an unassigned lesson. It must dominate the per-unit weights
     // of IDLE_GAP and SUBJECT_DISTRIBUTION (both ONE_SOFT) by a wide margin so
@@ -151,6 +158,17 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     // Mirrors FacultyDailyHoursConstraint.COLLEGE_WIDE_MAX_DAILY_HOURS (5)
     private static final int COLLEGE_WIDE_MAX_DAILY_HOURS = 5;
 
+    // Mirrors SubjectDemandService: a NORMAL subject (THEORY / GAME / OTHER)
+    // holds at most 2 periods a day, and when it holds 2 they are consecutive.
+    private static final int MAX_PERIODS_PER_SUBJECT_PER_DAY =
+        SubjectDemandService.MAX_PERIODS_PER_SUBJECT_PER_DAY;
+
+    // Mirrors SubjectDemandService.SINGLE_PERIOD_WEEK_LIMIT: up to 5 weekly
+    // periods a normal subject is spread one period per day; beyond that the
+    // surplus is planned as consecutive pairs.
+    private static final int SINGLE_PERIOD_WEEK_LIMIT =
+        SubjectDemandService.SINGLE_PERIOD_WEEK_LIMIT;
+
     // Soft weight of one THEORY teaching day beyond the ideal. It equals the
     // college-wide daily cap so that "fewer teaching days" ALWAYS dominates
     // gap compactness (the user's priority order): the lunch-break rule forces
@@ -164,10 +182,11 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     // unassigned > idle-gap > distribution intact.
     // The weight is applied to the ABSOLUTE deviation from the ideal day count
     // (see theoryDistributionPenalty), so it also prices a day SHORT of the
-    // ideal. For block size 2 that is what makes the intended double/single
-    // day count the optimum instead of merely an upper bound; for block size 1
-    // the hard daily cap means the under-ideal term can never fire.
-    // Public so the constraint tests can reference the exact weight they assert.
+    // ideal. That is what makes the intended double/single day count the optimum
+    // instead of merely an upper bound, for every block size — the hard daily cap
+    // only forbids a 6th period, so a subject packed 5 periods onto one day has to
+    // be priced away by the soft distribution terms. Public so the constraint
+    // tests can reference the exact weight they assert.
     public static final int EXTRA_THEORY_DAY_WEIGHT = COLLEGE_WIDE_MAX_DAILY_HOURS;
 
     // Mirrors FacultyWeeklyHoursConstraint.DEFAULT_MAX_WEEKLY_HOURS
@@ -218,6 +237,8 @@ public class TimetableConstraintProvider implements ConstraintProvider {
             labConsecutiveBlock(factory),
             labSaturdayForbidden(factory),
             consecutiveTeachingRule(factory),
+            subjectDailyPeriodLimit(factory),
+            sectionDailyPairLimit(factory),
             crossTimetableOccupancy(factory),
             unassignedLessons(factory),
             idleGap(factory),
@@ -499,6 +520,119 @@ public class TimetableConstraintProvider implements ConstraintProvider {
             .filter(lesson -> false)
             .penalize(HardSoftScore.ONE_HARD, lesson -> 1)
             .asConstraint(CONSECUTIVE_TEACHING_RULE);
+    }
+
+    /**
+     * Hard form of the Greedy planner's 2-period daily rule: a NORMAL subject
+     * (THEORY / GAME / OTHER) never holds more than 2 periods on a day, and when
+     * it holds 2 they are CONSECUTIVE periods. This mirrors the Greedy engine,
+     * where the rule is enforced by the distribution plan (at most one session
+     * per day) plus {@code TimetableGeneratorEngine#tryPlaceConsecutiveBlock}
+     * (a pair is always a consecutive window) and
+     * {@code TimetableGeneratorEngine#isAnotherTheoryPairPlacedOnDay}.
+     *
+     * <p>It has to be HARD rather than soft: with only a soft day-count
+     * preference the solver happily leaves a subject with 3 or 4 periods on one
+     * day (the daily teaching cap of 5 does not forbid it), which the greedy
+     * engine would never produce.
+     *
+     * <p>LAB components are excluded — practical sessions keep their own block
+     * rule ({@link #LAB_CONSECUTIVE_BLOCK}) and may share a day with a theory
+     * pair. Sessions are grouped per section, so two sections meeting the same
+     * subject on the same day are never merged, and unassigned lessons are
+     * excluded to match every other hard constraint.
+     *
+     * <p>Scoring: one hard point per surplus period on an over-full day, plus one
+     * hard point for a day holding exactly 2 periods that are not consecutive.
+     */
+    public Constraint subjectDailyPeriodLimit(ConstraintFactory factory) {
+        return factory.forEach(PlanningLesson.class)
+            .filter(lesson -> lesson.getTimeSlot() != null && lesson.getSubject() != null)
+            .groupBy(TimetableConstraintProvider::subjectSectionKey, ConstraintCollectors.toList())
+            .filter((key, lessons) -> subjectDailyPeriodViolations(lessons) > 0L)
+            .penalize(HardSoftScore.ONE_HARD,
+                (key, lessons) -> subjectDailyPeriodViolations(lessons))
+            .asConstraint(SUBJECT_DAILY_PERIOD_LIMIT);
+    }
+
+    /**
+     * Number of 2-period daily-rule violations in one (subject, section) group:
+     * every period above the daily ceiling on an over-full day, plus one for a
+     * two-period day whose periods are not adjacent.
+     */
+    private static long subjectDailyPeriodViolations(List<PlanningLesson> lessons) {
+        long violations = 0L;
+        for (List<Integer> orders : theoryOrdersByDay(lessons).values()) {
+            int size = orders.size();
+            if (size > MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                violations += size - MAX_PERIODS_PER_SUBJECT_PER_DAY;
+                continue;
+            }
+            if (size == MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                List<Integer> sorted = orders.stream().sorted().toList();
+                if (sorted.get(1) - sorted.get(0) != 1) {
+                    violations++;
+                }
+            }
+        }
+        return violations;
+    }
+
+    /**
+     * One section + one day = at most ONE back-to-back NORMAL subject, mirroring
+     * the Greedy engine's {@code TimetableGeneratorEngine#sectionAlreadyHostsLabOnDay}
+     * analogue {@code isAnotherTheoryPairPlacedOnDay}: a second paired subject on
+     * the same day is rejected even though its periods sit in different slots, so
+     * a busy day can never degenerate into three back-to-back sessions.
+     *
+     * <p>LAB components are excluded — a practical block may share a day with a
+     * theory pair. Because {@link #SUBJECT_DAILY_PERIOD_LIMIT} already caps a
+     * subject at 2 periods a day, "holds a consecutive pair" is exactly "holds
+     * 2 periods on that day", which keeps this constraint a plain count.
+     */
+    public Constraint sectionDailyPairLimit(ConstraintFactory factory) {
+        return factory.forEach(PlanningLesson.class)
+            .filter(lesson -> lesson.getTimeSlot() != null && lesson.getSubject() != null)
+            .groupBy(lesson -> lesson.getSectionId() + "_" + lesson.getTimeSlot().getDayOfWeek(),
+                ConstraintCollectors.toList())
+            .filter((dayKey, lessons) -> backToBackSubjectCount(lessons) > 1L)
+            .penalize(HardSoftScore.ONE_HARD,
+                (dayKey, lessons) -> backToBackSubjectCount(lessons) - 1L)
+            .asConstraint(SECTION_DAILY_PAIR_LIMIT);
+    }
+
+    /**
+     * Number of distinct subjects holding a back-to-back pair on one section-day.
+     */
+    private static long backToBackSubjectCount(List<PlanningLesson> lessons) {
+        long pairOwners = 0L;
+        for (List<PlanningLesson> bySubject : lessonsBySubject(lessons).values()) {
+            for (List<Integer> orders : theoryOrdersByDay(bySubject).values()) {
+                if (orders.size() == MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                    List<Integer> sorted = orders.stream().sorted().toList();
+                    if (sorted.get(1) - sorted.get(0) == 1) {
+                        pairOwners++;
+                        break;
+                    }
+                }
+            }
+        }
+        return pairOwners;
+    }
+
+    /**
+     * NORMAL (non-LAB) lessons of one section-day grouped by subject id.
+     */
+    private static Map<Long, List<PlanningLesson>> lessonsBySubject(List<PlanningLesson> lessons) {
+        Map<Long, List<PlanningLesson>> bySubject = new HashMap<>();
+        for (PlanningLesson lesson : lessons) {
+            if (lesson.isLab()) continue;
+            bySubject.computeIfAbsent(
+                lesson.getSubject() != null ? lesson.getSubject().getSubjectId() : Long.MIN_VALUE,
+                k -> new ArrayList<>())
+                .add(lesson);
+        }
+        return bySubject;
     }
 
     /**
@@ -799,6 +933,10 @@ public class TimetableConstraintProvider implements ConstraintProvider {
         // daily teaching cap already forces, so the under-ideal term can never
         // fire on a feasible solution and the penalty stays a pure "do not
         // spread" term.
+        // (Superseded: a NORMAL subject now holds at most 2 periods a day and its
+        // 6th+ periods are consecutive pairs, so the ideal is always the
+        // double/single day count from idealTeachingDays and the two-sided term
+        // is what steers the solver to it.)
         long penalty = Math.abs((long) byDay.size() - ideal) * EXTRA_THEORY_DAY_WEIGHT;
         for (List<Integer> orders : byDay.values()) {
             List<Integer> sorted = new ArrayList<>(orders);
@@ -825,6 +963,20 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     }
 
     /**
+     * Slot orders of a lesson list grouped by day, NORMAL (non-LAB) lessons only —
+     * the same theory/practical split the soft distribution penalty uses.
+     */
+    private static Map<String, List<Integer>> theoryOrdersByDay(List<PlanningLesson> lessons) {
+        Map<String, List<Integer>> ordersByDay = new HashMap<>();
+        for (PlanningLesson lesson : lessons) {
+            if (lesson.isLab()) continue;
+            ordersByDay.computeIfAbsent(lesson.getTimeSlot().getDayOfWeek(), k -> new ArrayList<>())
+                .add(lesson.getTimeSlot().getSlotOrder());
+        }
+        return ordersByDay;
+    }
+
+    /**
      * Number of contiguous runs in a day's slot orders: adjacent orders belong
      * to the same run, a gap starts a new one.
      */
@@ -841,40 +993,53 @@ public class TimetableConstraintProvider implements ConstraintProvider {
     }
 
     /**
-     * Ideal number of teaching days for {@code lessonCount} theory lessons,
-     * mirroring the Greedy planner's {@code idealDaySizes} business rule: up to
-     * 5 lessons → 1 day, otherwise {@code ceil(n / 5)} days (a day never
-     * exceeds the college-wide daily teaching cap of 5, so the ideal is always
-     * achievable by the hard rules; 6 → 2 days, 7 → 2, 8 → 2, 9 → 2, 10 → 2,
-     * 11 → 3). The count is the THEORY lesson count of the group — a mixed
-     * subject's practical component is scored separately by the lab spread rule.
+     * Ideal number of teaching days for {@code lessonCount} theory lessons of a
+     * NORMAL subject, mirroring the Greedy planner's
+     * {@code SubjectDemandService#idealDaySizes} business rule: a normal subject
+     * holds at most {@link #MAX_PERIODS_PER_SUBJECT_PER_DAY} periods a day and,
+     * when it holds 2, they are back-to-back, so the ideal day count is
+     * {@code doubleDays + singleDays} for
+     * <pre>
+     *   doubleDays = max(0, lessonCount - 5)
+     *   singleDays = lessonCount - (doubleDays * 2)
+     * </pre>
+     * i.e. 5/wk → 5 days, 6/wk → 5, 7/wk → 5, 8/wk → 5, 9/wk → 5, 10/wk → 5,
+     * 11/wk → 6, 12/wk → 6. The count is the THEORY lesson count of the group —
+     * a mixed subject's practical component is scored separately by the lab
+     * spread rule.
      *
-     * <p>For {@code blockSize == 2} the ideal mirrors {@code SubjectDemandService#idealDaySizes}:
-     * when all periods fit as complete double blocks within one day (H ≤ 5 and
-     * H % 2 == 0) the ideal is 1; otherwise it follows the double/single formula.
+     * <p>The subject's stored {@code blockSize} no longer changes the pattern: the
+     * 2-period daily ceiling decides it, so a subject stored with the default
+     * {@code sessionBlockSize = 1} still gets its 6th+ periods as consecutive
+     * pairs instead of being spread one period per day. The one exception is a
+     * subject whose whole weekly demand is one explicitly requested consecutive
+     * block (2 hours/week with {@code sessionBlockSize} 2), which keeps that
+     * block on a single day.
      */
     private static long idealTeachingDays(int lessonCount, int blockSize) {
-        if (blockSize == 2) {
-            if (lessonCount <= COLLEGE_WIDE_MAX_DAILY_HOURS && lessonCount % blockSize == 0) {
-                return 1;
-            }
-            int doubleDays = Math.max(0, lessonCount - COLLEGE_WIDE_MAX_DAILY_HOURS);
-            int singleDays = lessonCount - doubleDays * blockSize;
-            if (singleDays < 0) {
-                // 2 * doubleDays overshot the demand, so not every period can be
-                // paired: fall back to as many complete doubles as the demand
-                // allows plus the leftover singles (H=11 -> 5 doubles + 1 single
-                // -> 6 days). Mirrors SubjectDemandService#idealDaySizes; without
-                // this correction the ideal came out one day short for every
-                // odd H > 5, which made the two-sided day penalty target a day
-                // count the shared distribution rule never produces.
-                doubleDays = lessonCount / blockSize;
-                singleDays = lessonCount - doubleDays * blockSize;
-            }
-            return doubleDays + singleDays;
+        if (lessonCount <= 0) {
+            return 1L;
         }
-        return Math.max(1L, (lessonCount + COLLEGE_WIDE_MAX_DAILY_HOURS - 1)
-            / COLLEGE_WIDE_MAX_DAILY_HOURS);
+        // A subject whose ENTIRE weekly demand is one explicitly requested
+        // 2-period consecutive block (2 hours/week with sessionBlockSize 2) keeps
+        // that block: one day, two consecutive periods. Without this the formula
+        // below yields doubleDays = max(0, 2 - 5) = 0 and singleDays = 2, i.e.
+        // one day per period, which silently discards the explicit 2xCONSECUTIVE
+        // request. Only reached when the subject actually stored 2, since the
+        // default/unset configuration reports 1.
+        if (blockSize == MAX_PERIODS_PER_SUBJECT_PER_DAY
+                && lessonCount == MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+            return 1L;
+        }
+        int doubleDays = Math.max(0, lessonCount - SINGLE_PERIOD_WEEK_LIMIT);
+        int singleDays = lessonCount - doubleDays * MAX_PERIODS_PER_SUBJECT_PER_DAY;
+        if (singleDays < 0) {
+            // More than the limit above the first threshold (e.g. H=11, 12):
+            // pair as much as possible and keep the odd period as a single.
+            doubleDays = lessonCount / MAX_PERIODS_PER_SUBJECT_PER_DAY;
+            singleDays = lessonCount - doubleDays * MAX_PERIODS_PER_SUBJECT_PER_DAY;
+        }
+        return doubleDays + singleDays;
     }
 
     private static boolean hasDepartmentPermission(PlannableFaculty faculty, Long targetDepartmentId,

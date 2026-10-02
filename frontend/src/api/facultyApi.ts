@@ -44,6 +44,11 @@ export const facultyApi = {
   getFacultyById: (id: number) =>
     axiosClient.get<ApiResponse<FacultyResponse>>(`/faculty/${id}`),
 
+  // Faculty selectable for subject assignment: every department of the caller's
+  // own college (cross-college assignment is never allowed).
+  getAssignableFaculty: (params?: { departmentId?: number }) =>
+    axiosClient.get<ApiResponse<FacultyResponse[]>>('/faculty/assignable', { params }),
+
   createFaculty: (data: FacultyRequest) =>
     axiosClient.post<ApiResponse<FacultyResponse>>('/faculty', data),
 

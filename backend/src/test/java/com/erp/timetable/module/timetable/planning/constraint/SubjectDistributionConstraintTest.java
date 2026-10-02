@@ -19,31 +19,40 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 /**
  * Phase 6C — {@code TimetableConstraintProvider#subjectDistribution} (soft).
  *
- * <p>The objective clusters repeated sessions of the same subject onto as few
- * teaching days as possible, matching the Greedy planner's {@code idealDaySizes}
- * business rule (the ideal now follows the college-wide daily teaching cap of 5).
- * Exact scoring formula:
+ * <p>The objective steers repeated sessions of the same subject onto the
+ * pair/single teaching-day pattern, matching the Greedy planner's
+ * {@code idealDaySizes} business rule: a NORMAL subject holds at most 2 periods
+ * a day, back-to-back when it holds 2. Exact scoring formula:
  * <pre>
- *   idealDays(subject)     = 1 if weeklyHours &lt;= 5, else ceil(weeklyHours / 5)
+ *   idealDays(subject)     = doubleDays + singleDays
+ *                            doubleDays = max(0, weeklyHours - 5)
+ *                            singleDays = weeklyHours - 2 * doubleDays
  *   daysUsed(subject)      = distinct teaching days
- *   dayPenalty             = max(0, daysUsed - idealDays) * EXTRA_THEORY_DAY_WEIGHT
+ *   dayPenalty             = |daysUsed - idealDays| * EXTRA_THEORY_DAY_WEIGHT
  *   gapPenalty             = non-adjacent pairs of same-day THEORY sessions
  *   penalty(subject)       = dayPenalty + gapPenalty
  *   total                  = SUM over (subject, section)
  * </pre>
- * {@code EXTRA_THEORY_DAY_WEIGHT} (5, the daily cap) dominates the gap weight
- * so "fewer teaching days" always beats same-day compactness: the lunch-break
- * rule forces one gap on any 5-lesson day, and a day penalty equal to the gap
- * penalty would make 3 days look as good as 2.
- * LAB is exempt from clustering: it keeps the original spread rule (one point
+ * The day penalty is TWO-SIDED: with a 2-period daily ceiling a packed day is
+ * now wrong in both directions, so a 5-hour subject scores 0 on 5 separate days
+ * ({@code 1+1+1+1+1}) and is penalised for both spreading past the ideal and
+ * compacting below it. {@code EXTRA_THEORY_DAY_WEIGHT} (5, the daily cap)
+ * dominates the gap weight so "matching the teaching-day pattern" always beats
+ * same-day compactness.
+ *
+ * <p>The ideal is computed from the lesson count of the group, so a lesson with
+ * no window (unassigned) does not raise it.
+ *
+ * <p>LAB is exempt from clustering: it keeps the original spread rule (one point
  * per same-day session beyond the first, a session being a consecutive run), so
  * the sessions of a {@code sessionBlockSize} 1 lab stay distinct single-period
  * runs and never merge into one oversized block. The hierarchy stays hard rules
  * &gt; UNASSIGNED_LESSONS &gt;
  * IDLE_GAP &gt; SUBJECT_DISTRIBUTION; this constraint never contributes to the
- * hard score, never penalises different subjects on one day, never penalises a
- * subject taught for a full day of back-to-back sessions, and never blocks a
- * placement the hard rules allow.
+ * hard score, never penalises different subjects on one day, and never blocks a
+ * placement the hard rules allow. The 2-period daily rule itself is enforced HARD
+ * by {@code TimetableConstraintProvider#subjectDailyPeriodLimit} and the one
+ * back-to-back subject per day by {@code #sectionDailyPairLimit}.
  */
 class SubjectDistributionConstraintTest {
 
@@ -51,9 +60,11 @@ class SubjectDistributionConstraintTest {
         ConstraintVerifier.build(new TimetableConstraintProvider(), SchedulingSolution.class, PlanningLesson.class);
 
     private static final PlannableFaculty PROF = faculty(1);
-    // 5 weekly hours → ideal 1 teaching day.
+    // 5 weekly hours → 1+1+1+1+1 → ideal 5 teaching days.
     private static final PlannableSubject MATH = subject(1, "MATH101", "THEORY", 1L, 5);
     private static final PlannableSubject PHYSICS = subject(2, "PHY201", "THEORY", 1L, 5);
+    // 2 weekly hours → ideal 2 teaching days (used to isolate the gap term).
+    private static final PlannableSubject SHORT = subject(4, "SHORT101", "THEORY", 1L, 2);
     // 6 weekly hours → ideal 2 teaching days, but LAB is exempt from clustering
     // (keeps the spread rule), so the ideal never affects these LAB fixtures.
     private static final PlannableSubject PHYSICS_LAB = subject(3, "PHY201L", "LAB", 1L, 6);
@@ -68,9 +79,10 @@ class SubjectDistributionConstraintTest {
             .hasNoImpact();
     }
 
-    // 2. The whole week clustered onto one day, back-to-back → ideal → 0.
+    // 2. The whole week compacted onto one day is now WRONG: a 5-hour subject
+    // belongs on 5 separate days, so 1 day is 4 days short of the ideal.
     @Test
-    void allSessionsOnOneDay_consecutive_hasNoImpact() {
+    void allSessionsOnOneDay_consecutive_isPenalisedAsCompaction() {
         constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
@@ -79,23 +91,15 @@ class SubjectDistributionConstraintTest {
                 teachingLesson(4, 1, MATH, mon(4)),
                 teachingLesson(5, 1, MATH, mon(5)),
                 mon(1), mon(2), mon(3), mon(4), mon(5))
-            .hasNoImpact();
+            .penalizesBy(4 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
     }
 
-    // 3. Sessions split over MORE days than ideal → EXTRA_THEORY_DAY_WEIGHT per
-    // extra day (dominates gap penalties, so fewer days always wins).
+    // 3. The deviation is TWO-SIDED: the ideal day count scores 0, and both
+    // spreading past it and compacting below it cost EXTRA_THEORY_DAY_WEIGHT per
+    // day of deviation.
     @Test
-    void extraTeachingDays_penalizeByDaysBeyondIdeal() {
-        // Two days for a 5-hour subject → 1 extra day × 5.
-        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
-            .given(
-                teachingLesson(1, 1, MATH, mon(1)),
-                teachingLesson(2, 1, MATH, mon(2)),
-                teachingLesson(3, 1, MATH, tue(1)),
-                mon(1), mon(2), tue(1))
-            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
-
-        // Five days for a 5-hour subject → 4 extra days × 5.
+    void teachingDays_deviateInBothDirectionsFromTheIdeal() {
+        // The intended pattern for a 5-hour subject: one period per day.
         constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
@@ -104,42 +108,83 @@ class SubjectDistributionConstraintTest {
                 teachingLesson(4, 1, MATH, thu(1)),
                 teachingLesson(5, 1, MATH, fri(1)),
                 mon(1), tue(1), wed(1), thu(1), fri(1))
-            .penalizesBy(4 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
-    }
+            .hasNoImpact();
 
-    // 4. Same-day sessions that are NOT back-to-back cost one point per gap.
-    @Test
-    void sameDaySplitSessions_penalizePerGap() {
+        // Six days for a 6-lesson subject → ideal 5 days (2+1+1+1+1) → 1 extra day × 5.
         constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
-                teachingLesson(2, 1, MATH, mon(3)),
-                teachingLesson(3, 1, MATH, mon(5)),
-                mon(1), mon(3), mon(5))
-            .penalizesBy(2);
-    }
+                teachingLesson(2, 1, MATH, tue(1)),
+                teachingLesson(3, 1, MATH, wed(1)),
+                teachingLesson(4, 1, MATH, thu(1)),
+                teachingLesson(5, 1, MATH, fri(1)),
+                teachingLesson(6, 1, MATH, sat(1)),
+                mon(1), tue(1), wed(1), thu(1), fri(1), sat(1))
+            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
 
-    // 5. Back-to-back same-day sessions outscore the same sessions split apart.
-    @Test
-    void backToBack_outScoresSplitSameDay() {
-        HardSoftScore backToBack = constraintVerifier.verifyThat()
+        // Three lessons compacted onto two days → ideal 3 days → 1 short × 5.
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                teachingLesson(1, 1, MATH, mon(1)),
+                teachingLesson(2, 1, MATH, mon(2)),
+                teachingLesson(3, 1, MATH, tue(1)),
+                mon(1), mon(2), tue(1))
+            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
+
+        // Four lessons on two days → ideal 4 days → 2 short × 5.
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
                 teachingLesson(2, 1, MATH, mon(2)),
                 teachingLesson(3, 1, MATH, mon(3)),
-                mon(1), mon(2), mon(3))
-            .getScore();
+                teachingLesson(4, 1, MATH, tue(1)),
+                mon(1), mon(2), mon(3), tue(1))
+            .penalizesBy(2 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
+    }
 
-        HardSoftScore split = constraintVerifier.verifyThat()
+    // 4. Same-day sessions that are NOT back-to-back cost one point per gap, on
+    // top of the day term. A 2-hour subject has an ideal of 2 days, so both
+    // fixtures below sit 1 day short and only the gap term differs (1 vs 0).
+    @Test
+    void sameDaySplitSessions_penalizePerGap() {
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
-                teachingLesson(1, 1, MATH, mon(1)),
-                teachingLesson(2, 1, MATH, mon(3)),
-                teachingLesson(3, 1, MATH, mon(5)),
-                mon(1), mon(3), mon(5))
+                teachingLesson(1, 1, SHORT, mon(1)),
+                teachingLesson(2, 1, SHORT, mon(3)),
+                mon(1), mon(3))
+            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT + 1);
+
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                teachingLesson(1, 1, SHORT, mon(1)),
+                teachingLesson(2, 1, SHORT, mon(2)),
+                mon(1), mon(2))
+            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
+    }
+
+    // 5. On the same day count, back-to-back sessions outscore split sessions.
+    @Test
+    void backToBack_outScoresSplitSameDay() {
+        HardSoftScore backToBack = constraintVerifier
+            .verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                teachingLesson(1, 1, SHORT, mon(1)),
+                teachingLesson(2, 1, SHORT, mon(2)),
+                mon(1), mon(2))
             .getScore();
 
-        assertEquals(HardSoftScore.of(0, 0), backToBack);
-        assertEquals(HardSoftScore.of(0, -2), split);
+        HardSoftScore split = constraintVerifier
+            .verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                teachingLesson(1, 1, SHORT, mon(1)),
+                teachingLesson(2, 1, SHORT, mon(3)),
+                mon(1), mon(3))
+            .getScore();
+
+        assertEquals(
+            HardSoftScore.of(0, -TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), backToBack);
+        assertEquals(
+            HardSoftScore.of(0, -TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT - 1), split);
         assertTrue(backToBack.compareTo(split) > 0,
             "back-to-back sessions on one day must outscore the same sessions split apart");
     }
@@ -187,42 +232,46 @@ class SubjectDistributionConstraintTest {
             .hasNoImpact();
     }
 
-    // 8. An unassigned lesson creates no additional distribution penalty.
+    // 8. An unassigned lesson adds no penalty and does not raise the ideal
+    // either: the ideal follows the number of lessons actually in the group.
     @Test
     void unassignedLesson_doesNotAddPenalty() {
-        // Two placed sessions on two days = 1 extra day (× 5) for a 5-hour
-        // subject; the unassigned lesson (no window) adds nothing on top.
         constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
                 teachingLesson(2, 1, MATH, tue(1)),
                 unassignedLesson(3, 1, MATH),
                 mon(1), tue(1))
-            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
+            .hasNoImpact();
     }
 
-    // 9. Hard score remains unaffected by the subject-distribution penalty.
+    // 9. The soft day penalty never touches the hard score.
     @Test
     void hardScore_remainsUnaffected() {
-        HardSoftScore full = constraintVerifier.verifyThat()
+        // Three lessons on two days: ideal 3 days → 1 soft day penalty, 0 hard.
+        HardSoftScore compacted = constraintVerifier
+            .verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
-                teachingLesson(2, 1, MATH, tue(1)),
-                teachingLesson(3, 1, MATH, wed(1)),
-                teachingLesson(4, 1, MATH, thu(1)),
-                mon(1), tue(1), wed(1), thu(1))
+                teachingLesson(2, 1, MATH, mon(2)),
+                teachingLesson(3, 1, MATH, tue(1)),
+                mon(1), mon(2), tue(1))
             .getScore();
 
-        assertEquals(HardSoftScore.of(0, -3 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), full);
+        assertEquals(0, compacted.hardScore(),
+            "the distribution objective must never contribute a hard penalty");
+        assertEquals(
+            HardSoftScore.of(0, -TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), compacted);
     }
 
-    // 10. Explicit score-direction comparison: a clustered schedule (one day of
-    // back-to-back sessions) always outscores the same sessions scattered
-    // across days.
+    // 10. Explicit score-direction comparison: matching the pair/single pattern
+    // outscores compacting the same sessions onto one day, because a 2-period
+    // daily ceiling makes compaction wrong, not merely suboptimal.
     @Test
-    void scoreDirection_clusteredOutscoresScattered() {
-        // Schedule A: one MATH session on each of four days → (4 - 1) × 5 = 15.
-        HardSoftScore scattered = constraintVerifier.verifyThat()
+    void scoreDirection_pairSinglePatternOutscoresCompaction() {
+        // Schedule A: one MATH lesson on each of its 4 ideal days → 0.
+        HardSoftScore scattered = constraintVerifier
+            .verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
                 teachingLesson(2, 1, MATH, tue(1)),
@@ -231,8 +280,10 @@ class SubjectDistributionConstraintTest {
                 mon(1), tue(1), wed(1), thu(1))
             .getScore();
 
-        // Schedule B: the same four sessions back-to-back on one day → 0.
-        HardSoftScore clustered = constraintVerifier.verifyThat()
+        // Schedule B: the same four lessons compacted back-to-back on one day →
+        // 3 days short of the ideal × 5.
+        HardSoftScore compacted = constraintVerifier
+            .verifyThat(TimetableConstraintProvider::subjectDistribution)
             .given(
                 teachingLesson(1, 1, MATH, mon(1)),
                 teachingLesson(2, 1, MATH, mon(2)),
@@ -241,13 +292,57 @@ class SubjectDistributionConstraintTest {
                 mon(1), mon(2), mon(3), mon(4))
             .getScore();
 
-        assertEquals(HardSoftScore.of(0, -3 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), scattered);
-        assertEquals(HardSoftScore.of(0, 0), clustered);
-        assertTrue(clustered.compareTo(scattered) > 0,
-            "a clustered schedule must outscore the same sessions scattered across days");
+        assertEquals(HardSoftScore.of(0, 0), scattered);
+        assertEquals(
+            HardSoftScore.of(0, -3 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), compacted);
+        assertTrue(scattered.compareTo(compacted) > 0,
+            "the spread pattern must outscore the same lessons compacted onto one day");
+    }
+
+    // 11. A subject explicitly configured 2×CONSECUTIVE with 2 weekly hours
+    // (2 periods/week) is scored against an ideal of ONE day, so a single
+    // back-to-back pair is the clean solution and spreading it is penalised.
+    @Test
+    void explicitConsecutiveBlock_twoHourSubject_scoresAsOneDay() {
+        // The configured block: both periods back-to-back on one day → ideal → 0.
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                pairLesson(1, 1, mon(1)),
+                pairLesson(2, 1, mon(2)),
+                mon(1), mon(2))
+            .hasNoImpact();
+
+        // The same 2 periods split across two days contradict the request.
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                pairLesson(1, 1, mon(1)),
+                pairLesson(2, 1, tue(1)),
+                mon(1), tue(1))
+            .penalizesBy(TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT);
+    }
+
+    // 12. The same 2 lessons WITHOUT the explicit block (default SINGLE) keep the
+    // spread ideal of 2 days — the block must be earned by configuration, not
+    // granted to every 2-hour subject.
+    @Test
+    void singleConfigured_twoHourSubject_scoresAsTwoDays() {
+        constraintVerifier.verifyThat(TimetableConstraintProvider::subjectDistribution)
+            .given(
+                teachingLesson(1, 1, SHORT, mon(1)),
+                teachingLesson(2, 1, SHORT, tue(1)),
+                mon(1), tue(1))
+            .hasNoImpact();
     }
 
     // ── helpers ────────────────────────────────────────────────────────────
+
+    // 2 weekly hours configured as an explicit 2×CONSECUTIVE block
+    // (sessionBlockSize 2).
+    private static final PlannableSubject PAIR = subject(5, "PT101", "THEORY", 1L, 2, 2);
+
+    private static PlanningLesson pairLesson(long id, long sectionId, PlannableTimeSlot slot) {
+        return ConstraintTestFixtures.lesson(id, sectionId, PROF, PAIR, room(1), slot);
+    }
 
     private static PlannableTimeSlot mon(int order) {
         return window(order, "MON", order);
@@ -267,6 +362,10 @@ class SubjectDistributionConstraintTest {
 
     private static PlannableTimeSlot fri(int order) {
         return window(400 + order, "FRI", order);
+    }
+
+    private static PlannableTimeSlot sat(int order) {
+        return window(500 + order, "SAT", order);
     }
 
     private static PlanningLesson teachingLesson(long id, long sectionId, PlannableSubject subject,

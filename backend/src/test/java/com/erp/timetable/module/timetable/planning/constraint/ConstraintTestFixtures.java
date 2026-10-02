@@ -107,6 +107,16 @@ public final class ConstraintTestFixtures {
 
     public static PlannableSubject subject(long id, String code, String subjectType, Long assignedFacultyId,
             Integer weeklyHours) {
+        return subject(id, code, subjectType, assignedFacultyId, weeklyHours, null);
+    }
+
+    /**
+     * Subject fixture that also carries the stored consecutive-period block size —
+     * the value that decides whether a 2-hour subject plans as ONE 2-period block
+     * or as two single periods.
+     */
+    public static PlannableSubject subject(long id, String code, String subjectType, Long assignedFacultyId,
+            Integer weeklyHours, Integer sessionBlockSize) {
         return PlannableSubject.builder()
             .subjectId(id)
             .subjectCode(code)
@@ -114,6 +124,7 @@ public final class ConstraintTestFixtures {
             .subjectType(subjectType)
             .assignedFacultyId(assignedFacultyId)
             .weeklyHours(weeklyHours)
+            .sessionBlockSize(sessionBlockSize)
             .build();
     }
 

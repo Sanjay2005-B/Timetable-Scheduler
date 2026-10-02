@@ -7,6 +7,7 @@ import com.erp.timetable.module.auth.entity.RoleName;
 import com.erp.timetable.module.auth.entity.User;
 import com.erp.timetable.module.auth.repository.UserRepository;
 import com.erp.timetable.module.auth.security.UserPrincipal;
+import com.erp.timetable.module.department.entity.AcademicYear;
 import com.erp.timetable.module.department.entity.Department;
 import com.erp.timetable.module.department.entity.Section;
 import com.erp.timetable.module.department.repository.DepartmentRepository;
@@ -309,11 +310,19 @@ public class TimetableService {
                 .severity(c.getSeverity())
                 .build()).toList();
 
+        AcademicYear year = t.getSection() != null ? t.getSection().getAcademicYear() : null;
+
         return TimetableResponse.builder()
             .id(t.getId())
             .academicSession(t.getAcademicSession())
             .departmentId(t.getDepartment().getId())
             .departmentName(t.getDepartment().getName())
+            // Read through the existing timetable -> section -> academicYear
+            // relationship (the same path ReportService already uses) so a caller
+            // can render the class as DEPARTMENT-YEAR-SECTION without the frontend
+            // having to resolve the year from a separate departments lookup.
+            .academicYearId(year != null ? year.getId() : null)
+            .yearLabel(year != null ? year.getYearLabel() : null)
             .sectionId(t.getSection().getId())
             .sectionName(t.getSection().getName())
             .semester(t.getSemester())

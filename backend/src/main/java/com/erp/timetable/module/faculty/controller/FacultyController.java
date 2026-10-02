@@ -14,6 +14,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
+
 @RestController
 @RequestMapping("/faculty")
 @RequiredArgsConstructor
@@ -23,7 +25,7 @@ public class FacultyController {
     private final FacultyService facultyService;
 
     @PostMapping
-    @PreAuthorize("@rbacGuard.canManageDepartment(authentication, #request.departmentId)")
+    @PreAuthorize("@rbacGuard.canCreateFaculty(authentication, #request.departmentId)")
     @Operation(summary = "Create a new faculty profile")
     public ResponseEntity<ApiResponse<FacultyResponse>> createFaculty(
             @Valid @RequestBody FacultyRequest request) {
@@ -44,6 +46,15 @@ public class FacultyController {
             @RequestParam(defaultValue = "firstName,asc") String sort) {
         PageResponse<FacultyResponse> pageResponse = facultyService.getFaculty(page, size, search, departmentId, status, sort);
         return ResponseEntity.ok(ApiResponse.success(pageResponse));
+    }
+
+    @GetMapping("/assignable")
+    @PreAuthorize("hasAnyRole('SUPER_ADMIN', 'COLLEGE_ADMIN', 'HOD')")
+    @Operation(summary = "List faculty selectable for subject assignment (own college, any department)")
+    public ResponseEntity<ApiResponse<List<FacultyResponse>>> getAssignableFaculty(
+            @RequestParam(required = false) Long departmentId) {
+        List<FacultyResponse> response = facultyService.getAssignableFaculty(departmentId);
+        return ResponseEntity.ok(ApiResponse.success(response));
     }
 
     @GetMapping("/{id}")

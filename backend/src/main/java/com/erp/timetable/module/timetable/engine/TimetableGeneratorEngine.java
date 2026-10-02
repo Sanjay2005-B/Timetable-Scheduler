@@ -487,9 +487,9 @@ public class TimetableGeneratorEngine {
             // weekly hours so a block never exceeds its total weekly requirement.
             int blockSize = Math.min(subjectDemandService.getSessionBlockSize(subject), Math.max(1, weeklyHours));
 
-            // Each planned entry is ONE session (a consecutive block of its
-            // blockSize, or a single). The distribution plan clusters sessions onto
-            // the minimum number of teaching days (back-to-back teaching allowed).
+            // Each planned entry is ONE session (a consecutive pair of 2 periods, or
+            // a single period). The distribution plan gives a normal subject at most
+            // 2 periods a day, and when it takes 2 they are back-to-back.
             List<SubjectDemandService.DistributionEntry> planEntries = theoryDistribution.get(subject.getId());
             if (planEntries == null) {
                 planEntries = new ArrayList<>();
@@ -501,16 +501,34 @@ public class TimetableGeneratorEngine {
                     remaining -= size;
                 }
             }
+            // A planned consecutive pair is placed as a block even when the subject's
+            // stored sessionBlockSize is 1 (the default): the pair comes from the
+            // distribution plan, not from the subject's stored preference.
+            int plannedMaxBlock = planEntries.stream()
+                .mapToInt(SubjectDemandService.DistributionEntry::blockSize)
+                .max()
+                .orElse(1);
+            int effectiveBlockSize = Math.max(blockSize, plannedMaxBlock);
+            // Days this subject already holds a period on (locked entries carried
+            // into this run), so no fallback can give it 3 periods on one day or 2
+            // non-consecutive ones.
+            Set<String> usedDays = new HashSet<>();
+            for (TimetableEntry e : timetable.getEntries()) {
+                if (e.getSubject() != null && e.getSubject().getId().equals(subject.getId())
+                        && !Boolean.TRUE.equals(e.getIsLab()) && e.getDayOfWeek() != null) {
+                    usedDays.add(e.getDayOfWeek());
+                }
+            }
             Set<String> plannedDays = planEntries.stream()
                 .map(SubjectDemandService.DistributionEntry::day)
                 .collect(Collectors.toSet());
             log.info("  Scheduling theory: {} ({}) → sessions: {}, blockSize: {}", subject.getSubjectCode(),
-                subject.getSubjectName(), planEntries, blockSize);
+                subject.getSubjectName(), planEntries, effectiveBlockSize);
 
             List<Faculty> candidates = getQualifiedFacultyCandidates(
                 subject, allFaculty, timetable.getDepartment().getId());
 
-            if (blockSize > 1) {
+            if (effectiveBlockSize > 1) {
                 // ─────────────────────────────────────────────────────────────
                 // STEP 10c: Consecutive-period subjects.
                 // Each planned session is placed as a `blockSize`-period
@@ -527,53 +545,68 @@ public class TimetableGeneratorEngine {
                         if (tryPlaceConsecutiveBlock(timetable, subject, candidates, allSlots,
                             allRooms, sessionDay, sessionBlock, context)) {
                             generatedCount += sessionBlock;
+                            usedDays.add(sessionDay);
                             log.debug("  ✓ {} → {} ({} consecutive)", subject.getSubjectCode(), sessionDay, sessionBlock);
                             continue;
                         }
 
-                        // Fallback: place the block on a non-planned day (soft-goal relaxation).
+                        // Fallback: place the block on a non-planned day the subject
+                        // does not already occupy (soft-goal relaxation).
                         boolean fallbackPlaced = false;
                         for (String altDay : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
                             if (plannedDays.contains(altDay)) continue;
+                            if (usedDays.contains(altDay)) continue;
                             if (tryPlaceConsecutiveBlock(timetable, subject, candidates, allSlots,
                                 allRooms, altDay, sessionBlock, context)) {
                                 generatedCount += sessionBlock;
                                 offTargetPlacements++;
                                 fallbackPlaced = true;
+                                usedDays.add(altDay);
                                 log.debug("  ✓ {} → {} (fallback consecutive)", subject.getSubjectCode(), altDay);
                                 break;
                             }
                         }
 
                         if (!fallbackPlaced) {
-                            // Consecutive placement is a soft goal: relax it and
-                            // place the block's periods as individual single
-                            // sessions so the weekly theory demand is still met.
+                            // Consecutive placement is a soft goal, but the 2-per-day
+                            // rule is not: when no free consecutive window exists anywhere,
+                            // relax the pair into singles on DISTINCT days rather than two
+                            // non-adjacent periods on one day. A day already used by this
+                            // subject is never reused.
                             int placed = 0;
                             for (int i = 0; i < sessionBlock; i++) {
-                                if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
-                                    allRooms, sessionDay, context, false)) {
+                                String relaxedDay = null;
+                                if (!usedDays.contains(sessionDay)
+                                    && tryPlaceTheory(timetable, subject, candidates, teachingSlots,
+                                        allRooms, sessionDay, context, false)) {
+                                    relaxedDay = sessionDay;
+                                }
+                                if (relaxedDay == null) {
+                                    // Prefer a day that carries no planned session of this
+                                    // subject, then any day the subject does not occupy.
+                                    for (boolean unplanned : new boolean[] { true, false }) {
+                                        for (String altDay : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
+                                            if (usedDays.contains(altDay)) continue;
+                                            if (unplanned && plannedDays.contains(altDay)) continue;
+                                            if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
+                                                allRooms, altDay, context, false)) {
+                                                relaxedDay = altDay;
+                                                offTargetPlacements++;
+                                                break;
+                                            }
+                                        }
+                                        if (relaxedDay != null) break;
+                                    }
+                                }
+                                if (relaxedDay != null) {
+                                    usedDays.add(relaxedDay);
                                     placed++;
                                     generatedCount++;
-                                    log.debug("  ✓ {} → {} (block relaxed to single)", subject.getSubjectCode(), sessionDay);
-                                    continue;
-                                }
-                                boolean singleFallback = false;
-                                for (String altDay : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
-                                    if (plannedDays.contains(altDay)) continue;
-                                    if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
-                                        allRooms, altDay, context, false)) {
-                                        placed++;
-                                        generatedCount++;
-                                        offTargetPlacements++;
-                                        singleFallback = true;
-                                        log.debug("  ✓ {} → {} (block relaxed to single)", subject.getSubjectCode(), altDay);
-                                        break;
-                                    }
+                                    log.debug("  ✓ {} → {} (pair relaxed to single)", subject.getSubjectCode(), relaxedDay);
                                 }
                             }
                             if (placed == sessionBlock) {
-                                log.debug("  ⚡ {} block relaxed to singles", subject.getSubjectCode());
+                                log.debug("  ⚡ {} pair relaxed to singles on distinct days", subject.getSubjectCode());
                                 continue;
                             }
                             String msg = "Could not find " + sessionBlock
@@ -589,6 +622,7 @@ public class TimetableGeneratorEngine {
                     if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
                         allRooms, sessionDay, context, false)) {
                         generatedCount++;
+                        usedDays.add(sessionDay);
                         log.debug("  ✓ {} → {} (single)", subject.getSubjectCode(), sessionDay);
                         continue;
                     }
@@ -596,11 +630,13 @@ public class TimetableGeneratorEngine {
                     boolean fallbackPlaced = false;
                     for (String altDay : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
                         if (plannedDays.contains(altDay)) continue;
+                        if (usedDays.contains(altDay)) continue;
                         if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
                             allRooms, altDay, context, false)) {
                             generatedCount++;
                             offTargetPlacements++;
                             fallbackPlaced = true;
+                            usedDays.add(altDay);
                             log.debug("  ✓ {} → {} (fallback)", subject.getSubjectCode(), altDay);
                             break;
                         }
@@ -623,41 +659,33 @@ public class TimetableGeneratorEngine {
             // per slot. If the exact target day is impossible we fall back to any
             // other working day before declaring a conflict — this is the
             // pragmatic backtracking step that removes the greedy dead-ends.
-            // For blockSize=1, no two periods may share the same day — the
-            // fallback loop skips days where this subject is already placed.
+            // No two periods of a normal subject may share a day — the fallback
+            // loop skips days this subject already occupies (the 2-period daily
+            // ceiling is reached only as one consecutive pair).
             // ─────────────────────────────────────────────────────────────────
-            Set<String> subjectPlacedDays = new HashSet<>();
-            for (TimetableEntry e : timetable.getEntries()) {
-                if (e.getSubject() != null && e.getSubject().getId().equals(subject.getId())
-                        && !Boolean.TRUE.equals(e.getIsLab()) && e.getDayOfWeek() != null) {
-                    subjectPlacedDays.add(e.getDayOfWeek());
-                }
-            }
-
             for (SubjectDemandService.DistributionEntry session : planEntries) {
                 String day = session.day();
 
                 if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
                     allRooms, day, context, false)) {
                     generatedCount++;
-                    subjectPlacedDays.add(day);
+                    usedDays.add(day);
                     log.debug("  ✓ {} → {}", subject.getSubjectCode(), day);
                     continue;
                 }
 
-                // Fallback: place on a non-planned day (soft-goal relaxation).
+                // Fallback: place on a non-planned day the subject does not yet
+                // occupy (soft-goal relaxation).
                 boolean fallbackPlaced = false;
                 for (String altDay : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
-                    if (blockSize <= 1 && subjectPlacedDays.contains(altDay)) continue;
+                    if (usedDays.contains(altDay)) continue;
                     if (plannedDays.contains(altDay)) continue;
                     if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
                         allRooms, altDay, context, false)) {
                         generatedCount++;
                         offTargetPlacements++;
                         fallbackPlaced = true;
-                        if (blockSize <= 1) {
-                            subjectPlacedDays.add(altDay);
-                        }
+                        usedDays.add(altDay);
                         log.debug("  ✓ {} → {} (fallback)", subject.getSubjectCode(), altDay);
                         break;
                     }
@@ -695,18 +723,15 @@ public class TimetableGeneratorEngine {
 
             List<Faculty> candidates = getQualifiedFacultyCandidates(
                 subject, allFaculty, timetable.getDepartment().getId());
-            int subjectBlockSize = Math.min(
-                subjectDemandService.getSessionBlockSize(subject), Math.max(1, theoryHoursMap.getOrDefault(subject.getId(), 0)));
 
-            // For blockSize=1 subjects, track which days already hold a period
-            // (including any placed during this mop-up pass) so we never place
-            // two on the same day.
+            // For a normal subject, track which days already hold a period
+            // (including any placed during this mop-up pass) so a period is never
+            // added to a day the subject already occupies — its 2-per-day ceiling is
+            // only ever reached as one consecutive pair.
             Set<String> subjectDays = new HashSet<>();
-            if (subjectBlockSize <= 1) {
-                for (String day : WORKING_DAYS) {
-                    if (subjectHasPeriodOnDay(timetable, subject.getId(), day)) {
-                        subjectDays.add(day);
-                    }
+            for (String day : WORKING_DAYS) {
+                if (subjectHasPeriodOnDay(timetable, subject.getId(), day)) {
+                    subjectDays.add(day);
                 }
             }
 
@@ -714,7 +739,7 @@ public class TimetableGeneratorEngine {
             for (int i = 0; i < missing; i++) {
                 boolean placedAny = false;
                 for (String day : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
-                    if (subjectBlockSize <= 1 && subjectDays.contains(day)) {
+                    if (subjectDays.contains(day)) {
                         continue;
                     }
                     if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
@@ -723,20 +748,35 @@ public class TimetableGeneratorEngine {
                         offTargetPlacements++;
                         repaired++;
                         placedAny = true;
-                        if (subjectBlockSize <= 1) {
-                            subjectDays.add(day);
-                        }
+                        subjectDays.add(day);
                         log.debug("  ✓ {} → {} (mop-up)", subject.getSubjectCode(), day);
                         break;
                     }
                 }
-                if (!placedAny && subjectBlockSize <= 1) {
-                    // LAST RESORT: the one-period-per-day rule is only a spread
-                    // goal. When the week is otherwise completely full and this
-                    // subject's final theory period is the ONLY missing one, allow
-                    // a second period of the same subject on an already-used day so
-                    // the 42nd (or any otherwise-stranded) slot is filled instead of
-                    // leaving a gap plus a THEORY_SLOT_UNAVAILABLE conflict.
+                if (!placedAny) {
+                    // LAST RESORT: the week is otherwise completely full and this
+                    // subject's final theory period is the ONLY missing one. Placing
+                    // it keeps the class at its full 42-slot capacity instead of
+                    // leaving a gap plus a THEORY_SLOT_UNAVAILABLE conflict. A free
+                    // consecutive pair is preferred, because a pair stays inside the
+                    // 2-per-day / back-to-back rule; only when no window exists does
+                    // the period go onto a day the subject already occupies, which is
+                    // the single documented relaxation of the consecutive-pair rule.
+                    for (String day : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
+                        if (subjectDays.contains(day)) continue;
+                        if (tryPlaceConsecutiveBlock(timetable, subject, candidates, allSlots,
+                            allRooms, day, 2, context)) {
+                            generatedCount += 2;
+                            offTargetPlacements++;
+                            repaired += 2;
+                            placedAny = true;
+                            subjectDays.add(day);
+                            log.debug("  ✓ {} → {} (mop-up consecutive pair)", subject.getSubjectCode(), day);
+                            break;
+                        }
+                    }
+                }
+                if (!placedAny) {
                     for (String day : orderDaysBySectionLoad(timetable, WORKING_DAYS)) {
                         if (tryPlaceTheory(timetable, subject, candidates, teachingSlots,
                             allRooms, day, context, false)) {
@@ -744,13 +784,14 @@ public class TimetableGeneratorEngine {
                             offTargetPlacements++;
                             repaired++;
                             placedAny = true;
-                            log.debug("  ✓ {} → {} (mop-up same-day last resort)",
+                            subjectDays.add(day);
+                            log.debug("  ⚠ {} → {} (mop-up same-day last resort)",
                                 subject.getSubjectCode(), day);
                             break;
                         }
                     }
                 }
-                if (!placedAny && subjectBlockSize <= 1) {
+                if (!placedAny) {
                     // SWAP-REPAIR (generic, no special-casing): the only free cell
                     // may be blocked for this subject's faculty (e.g. that faculty
                     // already teaches another section at that slot). A feasible
@@ -1386,13 +1427,45 @@ public class TimetableGeneratorEngine {
      * Returns {@code true} when the given subject already has at least one
      * non-lab theory entry on the specified day.  Used as a shared guard by
      * STEP 10b (primary + fallback) and STEP 10d (mop-up) so that
-     * blockSize=1 subjects never receive two periods on the same day.
+     * a normal subject never receives two periods on the same day — its
+     * 2-per-day ceiling is only ever reached as one consecutive pair.
      */
     private boolean subjectHasPeriodOnDay(Timetable timetable, Long subjectId, String day) {
         for (TimetableEntry e : timetable.getEntries()) {
             if (e.getSubject() != null && e.getSubject().getId().equals(subjectId)
                     && !Boolean.TRUE.equals(e.getIsLab()) && day.equals(e.getDayOfWeek())) {
                 return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * One section + one day = at most ONE back-to-back NORMAL subject. Returns
+     * {@code true} when a different subject already occupies {@code day} with a
+     * consecutive pair of theory periods, so a second paired subject can never be
+     * placed on the same day. Lab entries are ignored — practical blocks are
+     * scheduled on their own rotation and may share a day with a theory pair.
+     */
+    private boolean isAnotherTheoryPairPlacedOnDay(Timetable timetable, Subject subject, String day) {
+        Map<Long, List<Integer>> slotOrdersByOtherSubject = new LinkedHashMap<>();
+        for (TimetableEntry e : timetable.getEntries()) {
+            if (e.getSubject() == null || e.getSubject().getId().equals(subject.getId())
+                    || Boolean.TRUE.equals(e.getIsLab())
+                    || !day.equals(e.getDayOfWeek()) || e.getTimeSlot() == null) {
+                continue;
+            }
+            slotOrdersByOtherSubject
+                .computeIfAbsent(e.getSubject().getId(), k -> new ArrayList<>())
+                .add(e.getTimeSlot().getSlotOrder());
+        }
+        for (List<Integer> slotOrders : slotOrdersByOtherSubject.values()) {
+            if (slotOrders.size() < 2) continue;
+            List<Integer> sorted = slotOrders.stream().sorted().toList();
+            for (int i = 1; i < sorted.size(); i++) {
+                if (sorted.get(i) - sorted.get(i - 1) == 1) {
+                    return true;
+                }
             }
         }
         return false;
@@ -1704,6 +1777,15 @@ public class TimetableGeneratorEngine {
 
         List<List<TimeSlot>> windows = buildConsecutiveWindows(allSlots, blockSize);
         if (windows.isEmpty()) return false;
+
+        // At most ONE back-to-back normal subject per day. A lab block is exempt —
+        // practical sessions are scheduled on their own rotation and may share a day
+        // with a theory pair.
+        if (isAnotherTheoryPairPlacedOnDay(timetable, subject, day)) {
+            log.debug("  ✗ {} → {} skipped: day already holds another subject's back-to-back pair",
+                subject.getSubjectCode(), day);
+            return false;
+        }
 
         // Least-loaded faculty first — balances daily workload across the team.
         List<Faculty> orderedCandidates = candidates.stream()

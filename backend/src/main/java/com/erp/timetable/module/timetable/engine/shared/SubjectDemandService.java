@@ -88,16 +88,19 @@ public class SubjectDemandService {
     }
 
     /**
-     * Returns the configured consecutive-period block size for a theory subject,
-     * clamped to the valid 1–3 range. LAB subjects always fall back to 1 here —
+     * Returns the consecutive-period block size for a theory subject, clamped to
+     * {@link #MAX_PERIODS_PER_SUBJECT_PER_DAY} (1–2). A NORMAL subject holds at
+     * most 2 periods a day, so a stored 3 is not a reachable placement for one and
+     * is clamped rather than reported. LAB subjects always fall back to 1 here —
      * their practical sessions are blocked by the lab scheduler via
-     * {@link #getPracticalBlockSize(Subject)}.
+     * {@link #getPracticalBlockSize(Subject)}, which still honours a 3-period lab
+     * block.
      */
     public int getSessionBlockSize(Subject subject) {
         if ("LAB".equalsIgnoreCase(subject.getSubjectType())) return 1;
         Integer blockSize = subject.getSessionBlockSize();
         if (blockSize == null || blockSize < 1) return 1;
-        return blockSize;
+        return Math.min(blockSize, MAX_PERIODS_PER_SUBJECT_PER_DAY);
     }
 
     /**
@@ -124,6 +127,22 @@ public class SubjectDemandService {
     }
 
     /**
+     * Maximum periods a NORMAL subject (THEORY / GAME / OTHER) may occupy on a
+     * single day. A second period on the same day is only ever planned as a
+     * consecutive pair, so a normal subject can never hold 3 or more periods in
+     * one day. LAB subjects are unaffected — their practical hours are placed by
+     * the lab scheduler as one strict consecutive block.
+     */
+    public static final int MAX_PERIODS_PER_SUBJECT_PER_DAY = 2;
+
+    /**
+     * Weekly period count up to which a NORMAL subject is spread as single
+     * periods on separate days. Above this count the surplus periods are
+     * planned as consecutive pairs.
+     */
+    public static final int SINGLE_PERIOD_WEEK_LIMIT = 5;
+
+    /**
      * One theory session: a run of {@code blockSize} consecutive periods (or a
      * single period when {@code blockSize == 1}) to be placed on {@code day}.
      */
@@ -131,31 +150,44 @@ public class SubjectDemandService {
     }
 
     /**
-     * Builds the weekly theory distribution plan. Each subject's periods are
-     * placed on distinct working days whenever possible:
+     * Builds the weekly theory distribution plan for NORMAL subjects
+     * (THEORY / GAME / OTHER). A normal subject NEVER occupies more than
+     * {@link #MAX_PERIODS_PER_SUBJECT_PER_DAY} periods on a day, and when it
+     * takes two they are planned as one consecutive pair. The pattern is derived
+     * purely from the subject's own weekly hours {@code H}:
      *
+     * <pre>
+     *   doubleDays = max(0, H - 5)
+     *   singleDays = H - (doubleDays * 2)
+     * </pre>
+     *
+     * <p>which yields {@code doubleDays} days carrying a back-to-back pair and
+     * {@code singleDays} days carrying one period each:
      * <ul>
-     *   <li>{@code blockSize == 1} (single periods): {@code H} days of 1 period
-     *       each (e.g. 5/wk → Mon=1, Tue=1, Wed=1, Thu=1, Fri=1).</li>
-     *   <li>{@code blockSize == 2} (double periods): a mix of back-to-back
-     *       double-period days and single-period days that sums to {@code H}:
-     *       {@code doubleDays = max(0, H - 5)}, {@code singleDays = H - doubleDays*2},
-     *       yielding e.g. 8/wk → 2+2+2+1+1 across 5 days.</li>
+     *   <li>5/wk → 1+1+1+1+1 (5 single days, no pair)</li>
+     *   <li>6/wk → 2+1+1+1+1 (exactly one pair)</li>
+     *   <li>7/wk → 2+2+1+1+1 (exactly two pairs)</li>
+     *   <li>8/wk → 2+2+2+1+1 (exactly three pairs)</li>
      * </ul>
+     * The same formula serves every subject, with no per-subject special case.
+     * A subject gets AT MOST ONE session per day, so a day can never carry more
+     * than the 2-period ceiling.
      *
      * <p>The target days are chosen to keep the WHOLE-CLASS week balanced and
      * never plan more periods onto a day than the section can physically hold:
      * each preferred day-size is assigned to the LEAST-LOADED day that still has
      * enough free capacity, and the planned load is tracked across subjects so
-     * two subjects never over-plan the same day. When no day can hold a
-     * preferred block, the subject's remaining periods spill onto the days with
-     * the MOST remaining capacity (spreading is a soft goal; hard constraints rule).
+     * two subjects never over-plan the same day. A pair-day is additionally
+     * de-prioritised on a day that already carries another subject's pair, so at
+     * most one normal subject takes a back-to-back block per day. When no day can
+     * hold a preferred block, the subject's remaining periods spill onto the days
+     * with the MOST remaining capacity (spreading is a soft goal; hard constraints
+     * rule).
      *
-     * <p>The returned list contains one {@link DistributionEntry} per SESSION (a
-     * block of the subject's block size, or a single for the remainder), so a
-     * subject's periods cluster onto the target days while the sessions still
-     * follow the per-subject sessionBlockSize. Days repeat when one day must
-     * hold several sessions. Locked days (partial regeneration) are excluded.
+     * <p>Each {@link DistributionEntry} is ONE session: {@code blockSize == 2}
+     * marks a consecutive pair, {@code blockSize == 1} a single period, so the
+     * sum of the entries is always the subject's weekly hours. Locked days
+     * (partial regeneration) are excluded.
      *
      * @param occupiedDays days already covered by locked entries (partial regeneration)
      * @param dayCapacity  free teaching periods the section can still hold per day
@@ -190,6 +222,9 @@ public class SubjectDemandService {
             Random rng) {
         Map<Long, List<DistributionEntry>> plan = new HashMap<>();
         Map<String, Integer> plannedLoad = new HashMap<>();
+        // Days that already carry a back-to-back pair of a NORMAL subject, so a
+        // second subject is not planned onto the same day for its own pair.
+        Map<String, Long> pairDayOwner = new HashMap<>();
 
         for (int subjectIndex = 0; subjectIndex < theorySubjects.size(); subjectIndex++) {
             Subject subject = theorySubjects.get(subjectIndex);
@@ -201,6 +236,9 @@ public class SubjectDemandService {
             }
 
             int blockSize = Math.min(getSessionBlockSize(subject), Math.max(1, weeklyHours));
+            // A normal subject holds at most one session a day, and that session
+            // is a single period or one consecutive pair — never 3 or more.
+            int perDayCap = Math.min(MAX_PERIODS_PER_SUBJECT_PER_DAY, Math.max(1, weeklyHours));
 
             List<String> availableDays = new ArrayList<>(WORKING_DAYS.stream()
                 .filter(d -> !occupiedDays.getOrDefault(subject.getId(), Set.of()).contains(d))
@@ -220,66 +258,39 @@ public class SubjectDemandService {
             Map<String, Integer> assigned = new LinkedHashMap<>();
             List<Integer> daySizes = idealDaySizes(weeklyHours, blockSize);
             for (int size : daySizes) {
-                List<String> mainLoopCandidates = blockSize <= 1
-                    ? availableDays.stream().filter(d -> !assigned.containsKey(d)).toList()
-                    : availableDays;
+                // One session per day: the subject never takes a second session on
+                // a day it already has, which is what caps it at 2 periods a day.
+                List<String> mainLoopCandidates = availableDays.stream()
+                    .filter(d -> !assigned.containsKey(d))
+                    .toList();
+                // A pair-day is de-prioritised when another subject already holds a
+                // pair that day (at most one back-to-back subject per day).
+                if (size >= MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+                    mainLoopCandidates = mainLoopCandidates.stream()
+                        .sorted(Comparator.comparingInt(d -> pairDayOwner.containsKey(d) ? 1 : 0))
+                        .toList();
+                }
                 String bestDay = leastLoadedFittingDay(mainLoopCandidates, plannedLoad, dayCapacity, facultyCap, size);
                 if (bestDay == null) {
-                    if (blockSize <= 1 && size > 1) {
-                        // For single-period sessions, try to place the maximum
-                        // possible periods (up to 5, respecting faculty cap) on
-                        // any available day to make progress toward the minimum
-                        // teaching days rule (ceil(H/5)). Continue the loop so
-                        // remaining ideal sizes are also considered.
-                        List<String> fallbackCandidates = availableDays.stream()
-                            .filter(d -> !assigned.containsKey(d))
-                            .toList();
-                        if (!fallbackCandidates.isEmpty()) {
-                            String fallbackDay = fallbackCandidates.get(0);
-                            int dayCap = dayCapacity.getOrDefault(fallbackDay, Integer.MAX_VALUE);
-                            int facultyFree = facultyCap.getOrDefault(fallbackDay, Integer.MAX_VALUE);
-                            int maxAssign = Math.min(size, 5);
-                            maxAssign = Math.min(maxAssign, dayCap);
-                            maxAssign = Math.min(maxAssign, facultyFree);
-                            if (maxAssign >= 1) {
-                                plannedLoad.merge(fallbackDay, maxAssign, Integer::sum);
-                                assigned.merge(fallbackDay, maxAssign, Integer::sum);
-                                continue;
-                            }
-                        }
-                    }
+                    // The pair/single pattern could not be honoured (day capacity or
+                    // faculty cap). Never silently cluster: keep spreading the rest
+                    // onto the remaining free days, one period each.
                     break;
                 }
                 plannedLoad.merge(bestDay, size, Integer::sum);
                 assigned.merge(bestDay, size, Integer::sum);
             }
 
-            // Spill the remainder onto the days with the most remaining capacity
-            // so the subject still keeps the minimum number of teaching days.
-            // For blockSize=1 we prefer already-used days (minimises teaching days
-            // by filling days already in use) and respect the college-wide daily
-            // cap of 5. For blockSize>1 we use the original behaviour.
+            // Spill any period the preferred pattern could not place onto the days
+            // with the most remaining capacity, never exceeding the 2-period
+            // per-day ceiling of a normal subject (a day already holding this
+            // subject's pair is not eligible for a further single).
             int remaining = weeklyHours
                 - assigned.values().stream().mapToInt(Integer::intValue).sum();
             while (remaining > 0) {
-                List<String> spillCandidates;
-                if (blockSize <= 1) {
-                    // Prefer already-used days first (minimises teaching days),
-                    // then fall back to unused days.
-                    List<String> alreadyUsedDays = availableDays.stream()
-                        .filter(d -> assigned.containsKey(d))
-                        .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
-                        .toList();
-                    List<String> unusedDays = availableDays.stream()
-                        .filter(d -> !assigned.containsKey(d))
-                        .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
-                        .toList();
-                    spillCandidates = new ArrayList<>();
-                    spillCandidates.addAll(alreadyUsedDays);
-                    spillCandidates.addAll(unusedDays);
-                } else {
-                    spillCandidates = availableDays;
-                }
+                List<String> spillCandidates = availableDays.stream()
+                    .filter(d -> assigned.getOrDefault(d, 0) < perDayCap)
+                    .toList();
                 String bestDay = mostFreeDay(spillCandidates, plannedLoad, dayCapacity, facultyCap);
                 if (bestDay == null) {
                     break;
@@ -289,75 +300,46 @@ public class SubjectDemandService {
                         - plannedLoad.getOrDefault(bestDay, 0),
                     facultyCap.getOrDefault(bestDay, Integer.MAX_VALUE));
                 int chunk = Math.min(remaining, Math.max(0, free));
-                if (blockSize <= 1) {
-                    chunk = Math.min(chunk, 1);
-                }
+                chunk = Math.min(chunk, perDayCap - assigned.getOrDefault(bestDay, 0));
                 if (chunk <= 0) {
-                    chunk = 1; // every day fully planned — degrade onto the least-loaded day
+                    break;
                 }
                 plannedLoad.merge(bestDay, chunk, Integer::sum);
                 assigned.merge(bestDay, chunk, Integer::sum);
                 remaining -= chunk;
             }
 
-            // Last resort: spread any still-unplaced remainder one-per-day across
-            // the least-loaded days.  For blockSize=1 we pack periods onto
-            // already-used days first (up to the college-wide daily cap of 5),
-            // then fall back to unused days only when necessary — this preserves
-            // the minimum-teaching-days rule (ceil(H/5)).  For blockSize>1 the
-            // full remainder is placed on the single least-loaded day.
+            // Last resort: the section/faculty capacity is already fully planned on
+            // every eligible day. Place the remainder one period at a time on the
+            // least-loaded day that the subject does not yet occupy — never a
+            // second period on a day, so the 2-period ceiling still holds.
             if (remaining > 0) {
-                if (blockSize <= 1) {
-                    // Phase 1: try to add periods to already-used days first
-                    // (minimises teaching days by filling days already in use).
-                    List<String> alreadyUsedDays = availableDays.stream()
-                        .filter(d -> assigned.containsKey(d))
-                        .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
-                        .toList();
-                    for (String day : alreadyUsedDays) {
-                        if (remaining <= 0) break;
-                        // College daily cap is 5 periods per day max.
-                        int maxAdd = 5 - plannedLoad.getOrDefault(day, 0);
-                        int chunk = Math.min(remaining, maxAdd);
-                        if (chunk > 0) {
-                            plannedLoad.merge(day, chunk, Integer::sum);
-                            assigned.merge(day, chunk, Integer::sum);
-                            remaining -= chunk;
-                        }
-                    }
-                    // Phase 2: if still remaining, fill unused days one period each.
-                    if (remaining > 0) {
-                        List<String> unassignedDays = availableDays.stream()
-                            .filter(d -> !assigned.containsKey(d))
-                            .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
-                            .toList();
-                        for (String day : unassignedDays) {
-                            if (remaining <= 0) break;
-                            plannedLoad.merge(day, 1, Integer::sum);
-                            assigned.merge(day, 1, Integer::sum);
-                            remaining--;
-                        }
-                    }
-                } else {
-                    String lastDay = availableDays.stream()
-                        .min(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
-                        .orElse(availableDays.get(0));
-                    plannedLoad.merge(lastDay, remaining, Integer::sum);
-                    assigned.merge(lastDay, remaining, Integer::sum);
+                List<String> unassignedDays = availableDays.stream()
+                    .filter(d -> !assigned.containsKey(d))
+                    .sorted(Comparator.comparingInt(d -> plannedLoad.getOrDefault(d, 0)))
+                    .toList();
+                for (String day : unassignedDays) {
+                    if (remaining <= 0) break;
+                    plannedLoad.merge(day, 1, Integer::sum);
+                    assigned.merge(day, 1, Integer::sum);
+                    remaining--;
                 }
             }
 
-            // Decompose each target day's size into blockSize sessions + singles.
-            // A day smaller than blockSize becomes singles only; the total always
-            // equals the subject's weekly hours (block placement is a soft goal).
+            // Decompose each target day's size into sessions: a 2-period day is one
+            // consecutive pair, a 1-period day a single. Never emit a second
+            // session on the same day — a normal subject holds at most 2 periods a
+            // day and, when it holds 2, they are back-to-back. The total always
+            // equals the subject's weekly hours.
             List<DistributionEntry> entries = new ArrayList<>();
             for (Map.Entry<String, Integer> dayEntry : assigned.entrySet()) {
                 String day = dayEntry.getKey();
                 int daySize = dayEntry.getValue();
-                int blocks = daySize / blockSize;
-                int singles = daySize % blockSize;
-                for (int k = 0; k < blocks; k++) {
-                    entries.add(new DistributionEntry(day, blockSize));
+                int pairs = daySize / MAX_PERIODS_PER_SUBJECT_PER_DAY;
+                int singles = daySize % MAX_PERIODS_PER_SUBJECT_PER_DAY;
+                for (int k = 0; k < pairs; k++) {
+                    entries.add(new DistributionEntry(day, MAX_PERIODS_PER_SUBJECT_PER_DAY));
+                    pairDayOwner.putIfAbsent(day, subject.getId());
                 }
                 for (int k = 0; k < singles; k++) {
                     entries.add(new DistributionEntry(day, 1));
@@ -423,83 +405,66 @@ public class SubjectDemandService {
     }
 
     /**
-     * Ideal periods-per-day pattern for {@code H} weekly theory periods.
-     *
-     * <p>When {@code blockSize == 1} (single-period sessions), each period
-     * lands on its own day — {@code H} days of size 1 (e.g. 5/wk →
-     * Mon=1, Tue=1, Wed=1, Thu=1, Fri=1).
-     *
-     * <p>When {@code blockSize == 2} (double-period sessions), the pattern
-     * is derived from the formula:
+     * Ideal periods-per-day pattern for {@code H} weekly periods of a NORMAL
+     * subject, derived from the single formula:
      * <pre>
      *   doubleDays = max(0, H - 5)
      *   singleDays = H - (doubleDays * 2)
      * </pre>
-     * This yields {@code doubleDays} days carrying 2 consecutive periods and
-     * {@code singleDays} days carrying 1 period each.  The total number of
-     * days used is {@code doubleDays + singleDays}; if that exceeds the
-     * available working days the caller reports a scheduling conflict.
+     * This yields {@code doubleDays} days carrying a back-to-back pair and
+     * {@code singleDays} days carrying one period each, so no day ever exceeds
+     * {@link #MAX_PERIODS_PER_SUBJECT_PER_DAY} periods and the total is exactly
+     * {@code H}:
+     * <ul>
+     *   <li>1/wk → 1</li>
+     *   <li>3/wk → 1+1+1</li>
+     *   <li>5/wk → 1+1+1+1+1</li>
+     *   <li>6/wk → 2+1+1+1+1</li>
+     *   <li>7/wk → 2+2+1+1+1</li>
+     *   <li>8/wk → 2+2+2+1+1</li>
+     *   <li>12/wk → 2+2+2+2+2+2</li>
+     * </ul>
+     * The number of days used is {@code doubleDays + singleDays}; if that exceeds
+     * the available working days the caller reports a scheduling conflict.
      *
-     * <p>For {@code blockSize >= 3} (legacy, no longer settable via UI) the
-     * old minimum-day clustering is retained for backward compatibility.
+     * <p>The subject's stored {@code blockSize} no longer changes the pattern —
+     * the 2-period daily ceiling decides it — with one exception: a subject whose
+     * whole weekly demand is one explicitly requested consecutive block (2
+     * hours/week with {@code sessionBlockSize} 2) keeps that block on one day.
+     * {@code blockSize >= 3} is no longer settable and is clamped elsewhere, so a
+     * legacy value cannot push a normal subject above 2 periods a day.
      */
     private List<Integer> idealDaySizes(int weeklyHours, int blockSize) {
         if (weeklyHours <= 0) return List.of();
         List<Integer> sizes = new ArrayList<>();
 
-        if (blockSize <= 1) {
-            // Minimum-teaching-days clustering: distribute H periods across
-            // the fewest days possible, up to 5 periods per day (college-wide
-            // daily cap). This mirrors the Greedy planner's minimum-day rule.
-            int minDays = (weeklyHours + 4) / 5; // ceil(H/5)
-            List<Integer> minSizes = new ArrayList<>();
-            int remaining = weeklyHours;
-            for (int d = 0; d < minDays; d++) {
-                int thisDaySize = Math.min(5, remaining);
-                minSizes.add(thisDaySize);
-                remaining -= thisDaySize;
-            }
-            // If there are leftover periods (should not happen with ceiling math),
-            // distribute them one per day onto already-used days.
-            while (remaining > 0) {
-                for (int d = 0; d < minSizes.size(); d++) {
-                    if (remaining <= 0) break;
-                    minSizes.set(d, minSizes.get(d) + 1);
-                    remaining--;
-                }
-            }
-            return minSizes;
+        // A subject whose ENTIRE weekly demand is one explicitly requested
+        // 2-period consecutive block (2 hours/week with sessionBlockSize 2) keeps
+        // that block: one day, two consecutive periods. Without this the formula
+        // below yields doubleDays = max(0, 2 - 5) = 0 and singleDays = 2, i.e.
+        // 1+1 on two days, which silently discards the explicit 2xCONSECUTIVE
+        // request. Only reached when the subject actually stored 2, because
+        // getSessionBlockSize reports 1 for the default/unset configuration and
+        // clamps anything above 2.
+        if (blockSize == MAX_PERIODS_PER_SUBJECT_PER_DAY
+                && weeklyHours == MAX_PERIODS_PER_SUBJECT_PER_DAY) {
+            return List.of(MAX_PERIODS_PER_SUBJECT_PER_DAY);
         }
 
-        if (blockSize == 2) {
-            // When all periods fit as complete double blocks within one day,
-            // cluster them (e.g. H=4 → [4] → decomposes to [2,2]).
-            if (weeklyHours <= 5 && weeklyHours % blockSize == 0) {
-                sizes.add(weeklyHours);
-                return sizes;
-            }
-            int doubleDays = Math.max(0, weeklyHours - 5);
-            int singleDays = weeklyHours - (doubleDays * 2);
-            if (singleDays < 0) {
-                doubleDays = weeklyHours / 2;
-                singleDays = weeklyHours - (doubleDays * 2);
-            }
-            for (int i = 0; i < doubleDays; i++) {
-                sizes.add(2);
-            }
-            for (int i = 0; i < singleDays; i++) {
-                sizes.add(1);
-            }
-            return sizes;
+        int doubleDays = Math.max(0, weeklyHours - SINGLE_PERIOD_WEEK_LIMIT);
+        int singleDays = weeklyHours - (doubleDays * 2);
+        if (singleDays < 0) {
+            // More than the limit above the first threshold (e.g. H=11, 12):
+            // pair as much as possible, keep the odd period as a single.
+            doubleDays = weeklyHours / MAX_PERIODS_PER_SUBJECT_PER_DAY;
+            singleDays = weeklyHours - (doubleDays * MAX_PERIODS_PER_SUBJECT_PER_DAY);
         }
-
-        // Legacy blockSize >= 3: cluster onto minimum days (ceil(H / 5)).
-        int remaining = weeklyHours;
-        while (remaining > 5) {
-            sizes.add(5);
-            remaining -= 5;
+        for (int i = 0; i < doubleDays; i++) {
+            sizes.add(MAX_PERIODS_PER_SUBJECT_PER_DAY);
         }
-        if (remaining > 0) sizes.add(remaining);
+        for (int i = 0; i < singleDays; i++) {
+            sizes.add(1);
+        }
         return sizes;
     }
 }

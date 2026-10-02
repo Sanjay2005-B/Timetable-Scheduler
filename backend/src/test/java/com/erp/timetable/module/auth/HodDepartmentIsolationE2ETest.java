@@ -377,25 +377,27 @@ class HodDepartmentIsolationE2ETest {
     }
 
     @Test
-    void hodCannotAssignSubjectToFacultyOfAnotherDepartment() throws Exception {
+    void hodCanAssignSubjectToFacultyOfAnotherDepartmentWithinSameCollege() throws Exception {
         Fixture f = fixture();
         String a = token(f.hodA(), HOD_PW);
 
-        // Own department, own year/section — but faculty from the sibling
-        // department. The department/year/section chain is valid, so only the
-        // faculty-scope rule can catch this.
+        // Own department, own year/section — faculty from the SIBLING department of
+        // the SAME college. Cross-department assignment inside one college is
+        // allowed; only cross-COLLEGE assignment is refused (covered separately in
+        // MultiCollegeE2ETest).
         MvcResult result = mockMvc.perform(post("/subjects")
                 .header("Authorization", "Bearer " + a)
                 .contentType(MediaType.APPLICATION_JSON)
-                .content("{\"subjectCode\":\"" + unique("SUB") + "\",\"subjectName\":\"CrossFaculty\","
+                .content("{\"subjectCode\":\"" + unique("SUB") + "\",\"subjectName\":\"CrossDeptFaculty\","
                     + "\"departmentId\":" + f.deptA()
                     + ",\"academicYearId\":" + f.yearA()
                     + ",\"sectionId\":" + f.sectionA()
                     + ",\"facultyId\":" + f.facB()
                     + ",\"semester\":1,\"credits\":3,\"theoryHours\":3,\"practicalHours\":0}"))
-            .andExpect(status().isUnprocessableEntity())
+            .andExpect(status().isCreated())
             .andReturn();
-        assertTrue(message(result).contains("faculty member"), message(result));
+        assertEquals(f.facB(), data(result).get("facultyId").asLong(),
+            "a sibling-department faculty member of the same college must be assignable");
     }
 
     @Test

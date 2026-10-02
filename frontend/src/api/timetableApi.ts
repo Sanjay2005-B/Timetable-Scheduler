@@ -39,6 +39,10 @@ export interface TimetableResponse {
   academicSession: string
   departmentId: number
   departmentName: string
+  /** Section's academic year, e.g. "1st Year". Lets the Faculty view build
+   *  DEPARTMENT-YEAR-SECTION without a second departments lookup. */
+  academicYearId: number | null
+  yearLabel: string | null
   sectionId: number
   sectionName: string
   semester: number

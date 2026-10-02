@@ -26,6 +26,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Objects;
+import java.util.Set;
 
 import com.erp.timetable.module.subject.entity.Subject;
 import com.erp.timetable.module.subject.repository.SubjectRepository;
@@ -104,10 +106,31 @@ public class FacultyService {
         }
         String username = request.getUsername().trim();
         Long collegeId = saved.getCollege() != null ? saved.getCollege().getId() : null;
+        String password = request.getPassword();
+
+        // Deleting a faculty member deactivates its login account instead of
+        // deleting it, so the Login ID is released while the account history is
+        // preserved. The users table is UNIQUE per (college, username), so that
+        // released ID must be reused by REBINDING the deactivated account rather
+        // than by inserting a second row - otherwise re-creating the same Login
+        // ID could never succeed.
+        User reclaimable = findReclaimableFacultyLogin(username, collegeId);
+        if (reclaimable != null) {
+            if (password == null || password.isBlank()) {
+                throw new BusinessException("Faculty Login Password is required when providing a Faculty Login ID");
+            }
+            if (userRepository.existsByEmailForCollege(saved.getEmail(), collegeId)) {
+                throw new BusinessException("Email '" + saved.getEmail() + "' is already in use by a user account in this college");
+            }
+            rebindFacultyLogin(reclaimable, saved, password);
+            log.info("Faculty login reused for {} ({}): username={}, userId={}",
+                saved.getFullName(), saved.getEmployeeId(), username, reclaimable.getId());
+            return;
+        }
+
         if (userRepository.existsByUsernameForCollege(username, collegeId)) {
             throw new BusinessException("Faculty Login ID '" + username + "' is already in use in this college");
         }
-        String password = request.getPassword();
         if (password == null || password.isBlank()) {
             throw new BusinessException("Faculty Login Password is required when providing a Faculty Login ID");
         }
@@ -134,6 +157,64 @@ public class FacultyService {
         facultyRepository.save(saved);
         log.info("Faculty login created for {} ({}): username={}, userId={}",
             saved.getFullName(), saved.getEmployeeId(), username, facultyUser.getId());
+    }
+
+    /**
+     * The deactivated, orphaned ROLE_FACULTY account that a deleted faculty
+     * member released, when this Login ID names one. Never returns an account
+     * from another college, an account that is still active, an account that
+     * still backs a live faculty record, or an account holding any role other
+     * than ROLE_FACULTY - so re-use can only ever reclaim a former faculty login.
+     */
+    private User findReclaimableFacultyLogin(String username, Long collegeId) {
+        for (User candidate : userRepository.findAllByUsername(username)) {
+            Long candidateCollegeId = candidate.getCollege() != null ? candidate.getCollege().getId() : null;
+            if (!Objects.equals(candidateCollegeId, collegeId)) {
+                continue;
+            }
+            if (Boolean.TRUE.equals(candidate.getIsActive())) {
+                continue;
+            }
+            if (facultyRepository.findByUserId(candidate.getId()).isPresent()) {
+                continue;
+            }
+            if (!isFacultyOnlyAccount(candidate)) {
+                continue;
+            }
+            return candidate;
+        }
+        return null;
+    }
+
+    private boolean isFacultyOnlyAccount(User user) {
+        Set<Role> roles = user.getRoles();
+        if (roles == null || roles.isEmpty()) {
+            return false;
+        }
+        for (Role role : roles) {
+            if (!RoleName.ROLE_FACULTY.equals(role.getName())) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /** Rebinds a released login to a new faculty record and reactivates it. */
+    private void rebindFacultyLogin(User user, Faculty saved, String rawPassword) {
+        user.setEmail(saved.getEmail());
+        user.setPassword(passwordEncoder.encode(rawPassword));
+        user.setFullName(saved.getFullName());
+        user.setDepartment(saved.getDepartment());
+        user.setCollege(saved.getCollege());
+        user.setIsActive(true);
+        // The released account must not inherit the previous holder's session.
+        user.setRefreshToken(null);
+        user.setRefreshTokenExpiry(null);
+        userRepository.save(user);
+        userRepository.revokeRefreshToken(user.getId());
+
+        saved.setUserId(user.getId());
+        facultyRepository.save(saved);
     }
 
     @Transactional(readOnly = true)
@@ -174,6 +255,38 @@ public class FacultyService {
             .first(pageResult.isFirst())
             .last(pageResult.isLast())
             .build();
+    }
+
+    @Transactional(readOnly = true)
+    public List<FacultyResponse> getAssignableFaculty(Long departmentId) {
+        User caller = tenantContext.currentUser();
+        departmentScopeResolver.requireHodDepartment(caller);
+        Long collegeId = resolveCollegeId(caller);
+        List<Faculty> faculty;
+        if (collegeId != null) {
+            faculty = departmentId == null
+                ? facultyRepository.findByCollege_IdOrderByFirstNameAsc(collegeId)
+                : facultyRepository.findByCollege_IdAndDepartment_IdOrderByFirstNameAsc(collegeId, departmentId);
+        } else {
+            faculty = departmentId == null
+                ? facultyRepository.findAllByOrderByFirstNameAsc()
+                : facultyRepository.findByDepartmentId(departmentId);
+        }
+        return faculty.stream().map(this::mapToResponse).toList();
+    }
+
+    /** The caller's tenant anchor, falling back to their own department's college. */
+    private Long resolveCollegeId(User caller) {
+        if (caller == null) {
+            return null;
+        }
+        if (caller.getCollege() != null) {
+            return caller.getCollege().getId();
+        }
+        if (caller.getDepartment() != null && caller.getDepartment().getCollege() != null) {
+            return caller.getDepartment().getCollege().getId();
+        }
+        return null;
     }
 
     @Transactional(readOnly = true)
@@ -235,7 +348,25 @@ public class FacultyService {
         //  deleted before the faculty row itself can be removed)
         timetableEntryRepository.deleteByFacultyId(id);
 
-        // Step 3: Delete faculty
+        // Step 3: Deactivate the linked login account. The User row itself is
+        // preserved (it carries the account history) but is deactivated, so the
+        // deleted faculty member can no longer sign in and the Login ID becomes
+        // available for re-use. Only the account linked to THIS faculty is
+        // touched - never any other user.
+        User linkedUser = faculty.getUserId() != null
+                ? userRepository.findById(faculty.getUserId()).orElse(null)
+                : null;
+        if (linkedUser != null && Boolean.TRUE.equals(linkedUser.getIsActive())) {
+            linkedUser.setIsActive(false);
+            linkedUser.setRefreshToken(null);
+            linkedUser.setRefreshTokenExpiry(null);
+            userRepository.save(linkedUser);
+            userRepository.revokeRefreshToken(linkedUser.getId());
+            log.info("Deactivated login account userId={} for deleted faculty {} ({})",
+                    linkedUser.getId(), faculty.getFullName(), faculty.getEmployeeId());
+        }
+
+        // Step 4: Delete faculty
         facultyRepository.delete(faculty);
         log.info("Faculty deleted: {} (unlinked {} subjects)", id, assignedSubjects.size());
     }

@@ -15,6 +15,8 @@ public class TimetableResponse {
     private String academicSession;
     private Long departmentId;
     private String departmentName;
+    private Long academicYearId;
+    private String yearLabel;
     private Long sectionId;
     private String sectionName;
     private Integer semester;

@@ -140,6 +140,36 @@ public class RbacGuard {
         return sameCollege(user, collegeIdOf(dept));
     }
 
+    /**
+     * Creating a faculty record is a college-administration action:
+     * SUPER_ADMIN: any; COLLEGE_ADMIN: own college only; HOD: excluded.
+     *
+     * <p>An HOD is confined to their own department and must not add people to
+     * it, which is why this is separate from {@link #canManageFaculty} - the
+     * latter still grants an HOD read/update on their OWN department's existing
+     * faculty records. An account that also holds ROLE_COLLEGE_ADMIN or
+     * ROLE_SUPER_ADMIN keeps full college administration, matching the
+     * frontend's {@code isHodReadOnly} rule.
+     */
+    public boolean canCreateFaculty(Authentication authentication, Long departmentId) {
+        User user = currentUser(authentication);
+        if (user == null) {
+            return fallbackRoleAllowed(authentication,
+                    RoleName.ROLE_SUPER_ADMIN, RoleName.ROLE_COLLEGE_ADMIN);
+        }
+        if (hasRole(user, RoleName.ROLE_SUPER_ADMIN)) {
+            return true;
+        }
+        if (departmentId == null || !hasRole(user, RoleName.ROLE_COLLEGE_ADMIN)) {
+            return false;
+        }
+        Department dept = departmentRepository.findById(departmentId).orElse(null);
+        if (dept == null) {
+            return true;
+        }
+        return sameCollege(user, collegeIdOf(dept));
+    }
+
     /** SUPER_ADMIN: any; COLLEGE_ADMIN: any faculty of own college; HOD: own dept of own college. */
     public boolean canManageFaculty(Authentication authentication, Long facultyId) {
         User user = currentUser(authentication);

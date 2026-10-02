@@ -134,11 +134,13 @@ class AllHardConstraintsAggregateTest {
 
         // S7: weekly-hours violation — 6 periods for one faculty (cap 5).
         PlannableFaculty f7 = faculty(8, 6, 5);
-        // 6 weekly hours → the clustering objective (Phase 6C) wants this subject
-        // on ceil(6/5) = 2 days; the fixture deliberately spreads it across all six
-        // days to isolate the weekly-hours hard rule, which adds a soft
-        // 4 extra-day × EXTRA_THEORY_DAY_WEIGHT penalty on top (see the expected
-        // total below).
+        // 6 weekly periods of NORMAL subject → the pair/single objective (Phase
+        // 6C) wants this subject on 5 teaching days (2+1+1+1+1); the fixture
+        // deliberately spreads one period across all six days to isolate the
+        // weekly-hours hard rule, which adds a soft 1-extra-day ×
+        // EXTRA_THEORY_DAY_WEIGHT penalty on top (see the expected total below).
+        // One period per day keeps it clear of the new daily 2-period and
+        // one-back-to-back-subject-per-day hard rules.
         PlannableSubject s7 = subject(7, "EN201", "THEORY", 8L);
         String[] days = {"MON", "TUE", "WED", "THU", "FRI", "SAT"};
         PlanningLesson[] weekly = new PlanningLesson[6];
@@ -190,13 +192,15 @@ class AllHardConstraintsAggregateTest {
             .given(given)
             .getScore();
 
-        // -13 hard (all hard violations above) and -20 soft: EN201 (S7) is
-        // taught across 6 days (4 beyond its ideal 2 teaching days) ×
-        // EXTRA_THEORY_DAY_WEIGHT (5) under the Phase 6C clustering objective
-        // (ideal days now follow the college-wide daily cap of 5). The S10 lab
-        // spread across 2 days is exempt from clustering (LAB keeps the spread
-        // rule), so it adds no soft penalty.
+        // -13 hard (all hard violations above) and -5 soft: EN201 (S7) is
+        // taught across 6 days, one period per day. Its 6 NORMAL lessons need
+        // 5 teaching days (2+1+1+1+1) under the Phase 6C pair/single objective,
+        // so the sixth day costs 1 day × EXTRA_THEORY_DAY_WEIGHT (5). The S10
+        // lab spread across 2 days is exempt (LAB keeps the spread rule), so it
+        // adds no soft penalty. Neither new hard rule fires on this fixture: the
+        // S6 daily overload is 7 DISTINCT subjects on MON (no back-to-back pair)
+        // and EN201 never puts two periods on one day.
         assertEquals(HardSoftScore.of(-13,
-            -4 * TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), score);
+            -TimetableConstraintProvider.EXTRA_THEORY_DAY_WEIGHT), score);
     }
 }
