@@ -16,6 +16,9 @@ node_modules/
 # Environment files
 .env
 .env.*
+# The production API base URL must be committed so Vercel's git-based build
+# inlines it; it contains no secret (a public HTTPS origin).
+!frontend/.env.production
 
 # OS files
 .DS_Store
