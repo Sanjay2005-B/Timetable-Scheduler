@@ -29,7 +29,20 @@ export default function ForgotPasswordPage() {
       const response = await authApi.forgotPassword({ usernameOrEmail })
       setResult(response.data?.data ?? null)
     } catch (err: any) {
-      setError(err?.response?.data?.message ?? 'Something went wrong. Please try again.')
+      // Never surface raw axios text (e.g. "timeout of 30000ms exceeded"):
+      // a timeout/network failure carries no response at all, so it is
+      // reported with plain user-facing copy instead.
+      const serverMessage = err?.response?.data?.message
+      if (serverMessage) {
+        setError(serverMessage)
+      } else if (err?.code === 'ECONNABORTED' || err?.code === 'ETIMEDOUT'
+          || /timeout/i.test(err?.message ?? '')) {
+        setError('The request took too long to complete. Please try again.')
+      } else if (!err?.response) {
+        setError('Unable to reach the server. Please try again.')
+      } else {
+        setError('Unable to send the password reset request. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -122,7 +135,7 @@ export default function ForgotPasswordPage() {
                   {loading ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      Requestingâ€¦
+                      Requesting...
                     </>
                   ) : (
                     <>
